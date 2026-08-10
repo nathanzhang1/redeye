@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "redeye",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "triggers": {
+    "crons": ["*/10 * * * *"]
+  },
+  "vars": {
+    "DISCORD_USER_ID": "444017517003014144"
+  },
+  // Browser Run (Browser Rendering) — required for JS-heavy career pages like Meta.
+  // Local: use `npm run dev` which passes --remote (quickAction needs remote mode).
+  "browser": {
+    "binding": "BROWSER",
+    "remote": true
+  },
+  "kv_namespaces": [
+    {
+      "binding": "SEEN_JOBS",
+      "id": "64f99eb69c2740e9bd921419fc96c612",
+      "preview_id": "64f99eb69c2740e9bd921419fc96c612"
+    }
+  ]
+}

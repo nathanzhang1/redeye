@@ -1,0 +1,110 @@
+# Redeye — New Grad SWE Career Page Tracker
+
+Cloudflare Worker that polls big-tech career pages every **10 minutes**, detects **new grad SWE** roles, dedupes them in **KV**, and notifies you on **Discord**.
+
+## Setup
+
+### 1. Install
+
+```bash
+npm install
+```
+
+### 2. Create KV namespace
+
+```bash
+npx wrangler kv namespace create SEEN_JOBS
+```
+
+Copy the returned `id` into [`wrangler.jsonc`](wrangler.jsonc) for both `id` and `preview_id` under the `SEEN_JOBS` binding.
+
+### 3. Secrets
+
+```bash
+npx wrangler secret put DISCORD_WEBHOOK_URL
+npx wrangler secret put RUN_SECRET
+```
+
+- **DISCORD_WEBHOOK_URL** — Discord channel webhook URL (Server Settings → Integrations → Webhooks).
+- **RUN_SECRET** — random string used as `Bearer` token for manual `POST /run`.
+
+For local / remote-dev, create `.dev.vars` (gitignored):
+
+```
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+RUN_SECRET=local-dev-secret
+```
+
+### 4. Browser Run
+
+Meta (and other JS-heavy boards) use the **BROWSER** binding in `wrangler.jsonc`. Enable Browser Run / Browser Rendering on your Cloudflare account if prompted on first use.
+
+Local testing **must** use remote mode (already set in `npm run dev`):
+
+```bash
+npm run dev
+```
+
+### 5. Deploy
+
+```bash
+npm run deploy
+```
+
+Cron `*/10 * * * *` runs on UTC in production.
+
+## Companies
+
+Configured in [`src/companies.ts`](src/companies.ts).
+
+**Meta** is already wired:
+
+- Filtered University Grad (Engineering) + Menlo Park URL
+- `fetchMode: "browser"` — Cloudflare Browser Run renders the SPA
+- `matchMode: "all_jobs"` — any `/jobs/<id>` link on that page counts (filters are in the URL)
+
+Add more companies the same way, then redeploy / restart `npm run dev`.
+
+| Field | Meaning |
+|-------|---------|
+| `fetchMode: "html"` | Plain `fetch` (default) |
+| `fetchMode: "browser"` | Browser Run rendered HTML |
+| `matchMode: "keywords"` | Require new-grad + SWE keywords (default) |
+| `matchMode: "all_jobs"` | Any job detail link matching `jobPathPattern` |
+
+**First successful poll** for a company seeds current matches into KV **without** Discord alerts. Later polls only notify on new job ids. Zero open roles is fine (bootstrap with an empty set).
+
+## Status monitor
+
+Each poll writes per-company results to KV. View them at `/status`:
+
+```bash
+# JSON
+curl "https://redeye.redeye-watch.workers.dev/status?token=redeye"
+
+# HTML (also works if you open this URL in a browser)
+open "https://redeye.redeye-watch.workers.dev/status?token=redeye&format=html"
+```
+
+Auth: `Authorization: Bearer <RUN_SECRET>` **or** `?token=<RUN_SECRET>`.
+
+Shows last run time, cron schedule, and per company: status, last check, matched jobs, notified count, bootstrap flag, errors, and a link to the career page.
+
+## Manual run / health
+
+```bash
+curl https://redeye.redeye-watch.workers.dev/health
+
+curl -X POST https://redeye.redeye-watch.workers.dev/run \
+  -H "Authorization: Bearer <RUN_SECRET>"
+```
+
+## KV keys
+
+| Key | Meaning |
+|-----|---------|
+| `bootstrap:{companyId}` | `done` after first seed |
+| `job:{companyId}:{jobId}` | Already seen / notified |
+| `fail:{companyId}` | Last scrape-failure Discord alert (6h cooldown) |
+| `status:company:{companyId}` | Last poll result for that company |
+| `status:last_run` | Aggregate last poll summary |
