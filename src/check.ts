@@ -25,6 +25,9 @@ export type CheckSummary = {
   }>;
 };
 
+/** Space out Browser Run calls — free tier rate-limits (~few/min). */
+const BROWSER_GAP_MS = 20_000;
+
 export async function checkAll(env: Env): Promise<CheckSummary> {
   const summary: CheckSummary = {
     companies: COMPANIES.length,
@@ -34,18 +37,29 @@ export async function checkAll(env: Env): Promise<CheckSummary> {
     details: [],
   };
 
+  let previousWasBrowser = false;
   for (const company of COMPANIES) {
+    const usesBrowser = (company.fetchMode ?? "html") === "browser";
+    if (usesBrowser && previousWasBrowser) {
+      await sleep(BROWSER_GAP_MS);
+    }
+
     const detail = await checkCompany(env, company);
     summary.details.push(detail);
     if (detail.status === "failed") summary.failures += 1;
     if (detail.status === "seeded") summary.seeded += 1;
     summary.newJobs += detail.notified;
     await saveRunStatus(env.SEEN_JOBS, company, detail);
+    previousWasBrowser = usesBrowser;
   }
 
   await saveLastRun(env.SEEN_JOBS, summary);
   console.log(JSON.stringify({ event: "check_complete", ...summary }));
   return summary;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function checkCompany(

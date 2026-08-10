@@ -57,11 +57,16 @@ Cron `*/10 * * * *` runs on UTC in production.
 
 Configured in [`src/companies.ts`](src/companies.ts).
 
-**Meta** is already wired:
+**Wired so far:**
 
-- Filtered University Grad (Engineering) + Menlo Park URL
-- `fetchMode: "browser"` — Cloudflare Browser Run renders the SPA
-- `matchMode: "all_jobs"` — any `/jobs/<id>` link on that page counts (filters are in the URL)
+- **Amazon** — Jobs for Grads (US + Software Development + PMT); public `search.json` + `all_jobs` (`/en/jobs/<id>/…`)
+- **Databricks** — University Recruiting / US page; Greenhouse JSON + `all_jobs` + title must include `New Grad`
+- **Uber** — University / Engineering / US page; Oracle HCM JSON + `all_jobs` + title must include `Graduate`
+- **Netflix** — University Recruiting + Engineering/PM + onsite + UCAN; Eightfold JSON + `all_jobs` (`/careers/job/<pid>`)
+- **Meta** — newest-first FT search (MPK/NYC/Bellevue); `browser` + `all_jobs` + title must include `University Grad`
+- **Apple** — Fresh Graduates (General) + US SWE/ML teams; `html` + `all_jobs` (`/details/<id>/<slug>`)
+- **Google** — Early + US + Bachelor's + Campus query; `html` + `all_jobs` + title must include `Campus`
+- **NVIDIA** — new college grad engineering (US); `browser` + `all_jobs` + title must include `New College Grad 2027`
 
 Add more companies the same way, then redeploy / restart `npm run dev`.
 

@@ -1,5 +1,8 @@
+import { fetchRenderedHtml } from "./browser";
 import { checkAll } from "./check";
+import { COMPANIES } from "./companies";
 import { notifyNewJobs } from "./discord";
+import { extractJobs } from "./parse";
 import { getTrackerStatus, renderStatusHtml } from "./status";
 
 export default {
@@ -40,6 +43,83 @@ export default {
       }
       return Response.json(status, {
         headers: { "Cache-Control": "no-store" },
+      });
+    }
+
+    if (request.method === "GET" && url.pathname === "/debug/meta-count") {
+      if (!authorize(request, env.RUN_SECRET, url)) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      const meta = COMPANIES.find((c) => c.id === "meta");
+      if (!meta) {
+        return Response.json({ error: "meta not configured" }, { status: 404 });
+      }
+
+      const pagesToFetch = Number(url.searchParams.get("pages") ?? "2");
+      const pageCount = Number.isFinite(pagesToFetch)
+        ? Math.min(Math.max(pagesToFetch, 1), 3)
+        : 2;
+
+      const pages: Array<{
+        page: number;
+        url: string;
+        htmlLength: number;
+        jobsPathIdsInHtml: number;
+        hasNoResultsCopy: boolean;
+        mentionsUniversityGrad: boolean;
+        hrefSamples: string[];
+        allJobs: number;
+        universityGrad: number;
+        sampleTitles: string[];
+        ugTitles: string[];
+      }> = [];
+
+      const allIds = new Set<string>();
+      const ugIds = new Set<string>();
+
+      for (let page = 1; page <= pageCount; page++) {
+        const pageUrl = new URL(meta.url);
+        if (page > 1) pageUrl.searchParams.set("page", String(page));
+        const html = await fetchRenderedHtml(env.BROWSER, pageUrl.toString());
+
+        const allOnPage = await extractJobs(
+          { ...meta, titleIncludes: undefined },
+          html,
+        );
+        const ugOnPage = await extractJobs(meta, html);
+
+        for (const job of allOnPage) allIds.add(job.id);
+        for (const job of ugOnPage) ugIds.add(job.id);
+
+        const jobPathHits = [
+          ...html.matchAll(/\/(?:profile\/job_details|jobs)\/(\d+)/gi),
+        ].map((m) => m[1]);
+        const hrefSamples = [...html.matchAll(/\bhref\s*=\s*(["'])(.*?)\1/gi)]
+          .map((m) => m[2])
+          .filter((h) => /job_details|\/jobs\//i.test(h))
+          .slice(0, 20);
+
+        pages.push({
+          page,
+          url: pageUrl.toString(),
+          htmlLength: html.length,
+          jobsPathIdsInHtml: new Set(jobPathHits).size,
+          hasNoResultsCopy: /no results|0 jobs|didn't find/i.test(html),
+          mentionsUniversityGrad: /university grad/i.test(html),
+          hrefSamples,
+          allJobs: allOnPage.length,
+          universityGrad: ugOnPage.length,
+          sampleTitles: allOnPage.map((j) => j.title).slice(0, 15),
+          ugTitles: ugOnPage.map((j) => j.title).slice(0, 15),
+        });
+      }
+
+      return Response.json({
+        note: "Counts what Browser Run sees per page (same path as the tracker). Meta may paginate beyond this.",
+        pagesFetched: pageCount,
+        uniqueAllJobsAcrossPages: allIds.size,
+        uniqueUniversityGradAcrossPages: ugIds.size,
+        pages,
       });
     }
 
