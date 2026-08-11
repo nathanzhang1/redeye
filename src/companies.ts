@@ -68,6 +68,8 @@ export const DEFAULT_KEYWORDS = [
   "campus",
   "university grad",
   "new graduate",
+  "emerging talent",
+  "graduate",
 ] as const;
 
 export const DEFAULT_ROLE_KEYWORDS = [
@@ -236,6 +238,20 @@ export const COMPANIES: Company[] = [
     metadataIncludes: [
       { name: "Careers Page Bucket", value: "EARLY TALENT AND INTERNSHIPS" },
     ],
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
+    id: "shopify",
+    name: "Shopify",
+    // Engineering & Data page surfaces SWE intern/new-grad postings; board is Ashby
+    // behind /careers/feed.xml (discipline filters aren't in the URL).
+    // Human UI: https://www.shopify.com/careers/disciplines/engineering-data
+    // New-grad + SWE keywords; drop Intern/Internship titles.
+    url: "https://www.shopify.com/careers/feed.xml",
+    fetchMode: "html",
+    matchMode: "keywords",
+    // Detail: /careers/<slug>_<uuid>
+    jobPathPattern: String.raw`/careers/[^/]+_[0-9a-f-]{36}`,
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {

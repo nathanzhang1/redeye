@@ -14,7 +14,7 @@ export type JobListing = {
 const USER_AGENT =
   "Mozilla/5.0 (compatible; RedeyeJobTracker/1.0; +https://github.com/redeye)";
 
-const FETCH_TIMEOUT_MS = 20_000;
+const FETCH_TIMEOUT_MS = 30_000;
 // Ashby boards embed full job HTML and routinely exceed 2MB.
 const MAX_HTML_BYTES = 4_000_000;
 
@@ -69,6 +69,16 @@ export async function extractJobs(
   const trimmed = html.trim();
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
     return extractJobsFromJson(company, trimmed);
+  }
+
+  // Shopify (and similar) XML job boards: <source><job>...</job></source>
+  if (
+    trimmed.startsWith("<?xml") ||
+    trimmed.startsWith("<source") ||
+    trimmed.startsWith("<rss")
+  ) {
+    const jobs = parseXmlJobFeed(trimmed);
+    return extractJobsFromJson(company, JSON.stringify({ jobs }));
   }
 
   // Stripe careers embeds a full job index in __NEXT_DATA__ (URL filters are client-side).
@@ -555,8 +565,40 @@ function decodeHtmlEntities(text: string): string {
     );
 }
 
+/** Shopify careers XML feed (`/careers/feed.xml`) and similar `<job>` boards. */
+function parseXmlJobFeed(xml: string): Array<Record<string, string>> {
+  const jobs: Array<Record<string, string>> = [];
+  for (const match of xml.matchAll(/<job>([\s\S]*?)<\/job>/gi)) {
+    const block = match[1] ?? "";
+    const title = xmlCdata(block, "title");
+    const url =
+      xmlCdata(block, "applyUrl") ||
+      xmlCdata(block, "url") ||
+      xmlCdata(block, "link");
+    const id = xmlCdata(block, "partnerJobId") || xmlCdata(block, "id");
+    const location = xmlCdata(block, "location");
+    if (!title || !url) continue;
+    const row: Record<string, string> = { title, url };
+    if (id) row.id = id;
+    if (location) row.location = location;
+    jobs.push(row);
+  }
+  return jobs;
+}
+
+function xmlCdata(block: string, tag: string): string {
+  const re = new RegExp(
+    `<${tag}>\\s*(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([^<]*))\\s*</${tag}>`,
+    "i",
+  );
+  const m = block.match(re);
+  return (m?.[1] ?? m?.[2] ?? "").trim();
+}
+
 /** Prefer stable board job ids when present in the path. */
 function canonicalizeJobUrl(url: URL): string {
+  const uuid =
+    String.raw`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`;
   const boardId =
     url.pathname.match(/\/(?:profile\/job_details|jobs(?:\/view)?|careers\/job)\/(\d{5,})/i)?.[1] ??
     url.pathname.match(/\/careers\/listing\/[^/]+\/(\d{5,})/i)?.[1] ??
@@ -567,9 +609,10 @@ function canonicalizeJobUrl(url: URL): string {
     url.pathname.match(/\/JobDetail\/[^/]+\/(\d+)/i)?.[1] ??
     url.pathname.match(/\/job\/([A-Za-z0-9_-]{6,})/i)?.[1] ??
     // Ashby: /notion/<uuid>
-    url.pathname.match(
-      /\/[a-z0-9_-]+\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i,
-    )?.[1] ??
+    url.pathname.match(new RegExp(String.raw`/[a-z0-9_-]+/(${uuid})$`, "i"))?.[1] ??
+    // Shopify: /careers/<slug>_<uuid>
+    url.pathname.match(new RegExp(String.raw`_(${uuid})$`, "i"))?.[1] ??
+    url.searchParams.get("ashby_jid") ??
     url.searchParams.get("gh_jid") ??
     url.searchParams.get("jobId") ??
     url.searchParams.get("job_id");
