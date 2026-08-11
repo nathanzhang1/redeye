@@ -28,6 +28,11 @@ export type Company = {
    */
   titleIncludes?: string[];
   /**
+   * If set, skip jobs whose title matches any of these (same matching rules as
+   * titleIncludes). Applied after titleIncludes.
+   */
+  titleExcludes?: string[];
+  /**
    * Greenhouse-style `{ departments: [{ name, jobs }] }` feeds: only include jobs
    * from departments whose name exactly matches one of these (case-insensitive).
    */
@@ -157,6 +162,19 @@ export const COMPANIES: Company[] = [
     locationIncludes: [", CA", ", NY", ", NC", "New York", "Charlotte", "San Francisco"],
     locationExcludes: ["Remote"],
     titleIncludes: ["New Grad", "Early", "Graduate"],
+  },
+  {
+    id: "figma",
+    name: "Figma",
+    // Early Career dept only; exclude PhD titles.
+    // Human UI: https://www.figma.com/careers/ (#early-career)
+    url: "https://boards-api.greenhouse.io/v1/boards/figma/departments",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Greenhouse detail: /figma/jobs/<id>
+    jobPathPattern: String.raw`/jobs/\d+`,
+    departmentIncludes: ["Early Career"],
+    titleExcludes: ["PhD"],
   },
   {
     id: "apple",

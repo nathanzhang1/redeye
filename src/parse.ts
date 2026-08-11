@@ -162,6 +162,9 @@ export async function extractJobs(
     if (company.titleIncludes?.length) {
       if (!titleMatchesIncludes(title, company.titleIncludes)) continue;
     }
+    if (company.titleExcludes?.length) {
+      if (titleMatchesIncludes(title, company.titleExcludes)) continue;
+    }
 
     const canonical = canonicalizeJobUrl(absolute);
     const id = await jobId(company.id, canonical);
@@ -264,6 +267,9 @@ async function extractJobsFromJson(
 
     if (company.titleIncludes?.length) {
       if (!titleMatchesIncludes(title, company.titleIncludes)) continue;
+    }
+    if (company.titleExcludes?.length) {
+      if (titleMatchesIncludes(title, company.titleExcludes)) continue;
     }
 
     const locationText = jsonLocationText(row);
@@ -426,6 +432,9 @@ async function extractStripeJobIndex(
 
     if (company.titleIncludes?.length) {
       if (!titleMatchesIncludes(listing.title, company.titleIncludes)) continue;
+    }
+    if (company.titleExcludes?.length) {
+      if (titleMatchesIncludes(listing.title, company.titleExcludes)) continue;
     }
 
     const absolute = new URL(
