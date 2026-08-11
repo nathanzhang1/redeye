@@ -400,6 +400,19 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
+    id: "snap",
+    name: "Snap",
+    // Engineering + Regular + US hubs (Bellevue/Chicago/LA/NY/PA/SF/Santa Monica/Seattle).
+    // Human UI: https://careers.snap.com/jobs?role=Engineering&type=Regular&location=Bellevue&location=Chicago&location=Los+Angeles&location=New+York&location=Palo+Alto&location=San+Francisco&location=Santa+Monica&location=Seattle
+    // Same filters via /api/jobs; new-grad + SWE keywords (no early-career titles today).
+    url: "https://careers.snap.com/api/jobs?role=Engineering&type=Regular&location=Bellevue&location=Chicago&location=Los+Angeles&location=New+York&location=Palo+Alto&location=San+Francisco&location=Santa+Monica&location=Seattle",
+    fetchMode: "html",
+    matchMode: "keywords",
+    // Workday apply: /recruiting/snapchat/snap/job/<loc>/<slug>_<id>
+    jobPathPattern: String.raw`/job/`,
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams

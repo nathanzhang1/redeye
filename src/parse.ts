@@ -317,12 +317,14 @@ async function extractJobsFromJson(
 }
 
 function jsonJobRows(data: unknown, company: Company): unknown[] | null {
-  if (Array.isArray(data)) return data;
+  if (Array.isArray(data)) return unwrapJsonJobHits(data);
   if (!data || typeof data !== "object") return null;
   const obj = data as Record<string, unknown>;
-  if (Array.isArray(obj.jobs)) return obj.jobs;
+  if (Array.isArray(obj.jobs)) return unwrapJsonJobHits(obj.jobs);
   // Eightfold PCS: { positions: [...], count: N }
-  if (Array.isArray(obj.positions)) return obj.positions;
+  if (Array.isArray(obj.positions)) return unwrapJsonJobHits(obj.positions);
+  // Snap careers: { body: [{ _source: { title, absolute_url, … } }] }
+  if (Array.isArray(obj.body)) return unwrapJsonJobHits(obj.body);
 
   // Phenom widgets: { refineSearch: { data: { jobs: [...] } } }
   const refine = obj.refineSearch;
@@ -330,13 +332,13 @@ function jsonJobRows(data: unknown, company: Company): unknown[] | null {
     const refineData = (refine as { data?: unknown }).data;
     if (refineData && typeof refineData === "object") {
       const jobs = (refineData as { jobs?: unknown }).jobs;
-      if (Array.isArray(jobs)) return jobs;
+      if (Array.isArray(jobs)) return unwrapJsonJobHits(jobs);
     }
   }
   // Phenom-ish: { data: { jobs: [...] } }
   if (obj.data && typeof obj.data === "object") {
     const jobs = (obj.data as { jobs?: unknown }).jobs;
-    if (Array.isArray(jobs)) return jobs;
+    if (Array.isArray(jobs)) return unwrapJsonJobHits(jobs);
   }
 
   // Greenhouse departments: { departments: [{ name, jobs: [...] }] }
@@ -352,7 +354,7 @@ function jsonJobRows(data: unknown, company: Company): unknown[] | null {
       if (wanted.length && !wanted.includes(name)) continue;
       if (Array.isArray(dept.jobs)) rows.push(...dept.jobs);
     }
-    return rows;
+    return unwrapJsonJobHits(rows);
   }
 
   // Oracle HCM: { items: [{ requisitionList: [...] }] }
@@ -360,10 +362,19 @@ function jsonJobRows(data: unknown, company: Company): unknown[] | null {
     for (const item of obj.items) {
       if (!item || typeof item !== "object") continue;
       const list = (item as { requisitionList?: unknown }).requisitionList;
-      if (Array.isArray(list)) return list;
+      if (Array.isArray(list)) return unwrapJsonJobHits(list);
     }
   }
   return null;
+}
+
+/** Elasticsearch-style hits: prefer `_source` when present. */
+function unwrapJsonJobHits(rows: unknown[]): unknown[] {
+  return rows.map((raw) => {
+    if (!raw || typeof raw !== "object") return raw;
+    const source = (raw as { _source?: unknown })._source;
+    return source && typeof source === "object" ? source : raw;
+  });
 }
 
 function jsonLocationText(row: Record<string, unknown>): string {
@@ -376,6 +387,20 @@ function jsonLocationText(row: Record<string, unknown>): string {
   if (typeof row.PrimaryLocation === "string") return row.PrimaryLocation;
   if (typeof row.normalized_location === "string") {
     return row.normalized_location;
+  }
+  if (typeof row.primary_location === "string") return row.primary_location;
+  if (typeof row.locationsText === "string") return row.locationsText;
+  if (Array.isArray(row.offices)) {
+    const parts = row.offices
+      .map((office) => {
+        if (!office || typeof office !== "object") return "";
+        const o = office as { location?: unknown; name?: unknown };
+        if (typeof o.location === "string" && o.location) return o.location;
+        if (typeof o.name === "string" && o.name) return o.name;
+        return "";
+      })
+      .filter(Boolean);
+    if (parts.length) return parts.join("; ");
   }
   return "";
 }
