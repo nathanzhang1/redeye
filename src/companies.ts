@@ -363,6 +363,22 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
+    id: "dropbox",
+    name: "Dropbox",
+    // Engineering + Remote - US: All locations (dropbox.jobs HTML is 403; Greenhouse).
+    // Human UI: https://www.dropbox.jobs/en/jobs/?location=Remote+-+US%3A+All+locations&team=Engineering
+    // New-grad + SWE keywords.
+    url: "https://boards-api.greenhouse.io/v1/boards/dropbox/jobs?content=false",
+    fetchMode: "html",
+    matchMode: "keywords",
+    // Detail: /listing/<id>
+    jobPathPattern: String.raw`/listing/\d+`,
+    metadataIncludes: [
+      { name: "Career Page Allocation", value: "Engineering" },
+    ],
+    locationIncludes: ["Remote - US: All locations"],
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams

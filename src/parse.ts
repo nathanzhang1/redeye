@@ -628,6 +628,7 @@ function canonicalizeJobUrl(url: URL): string {
     url.pathname.match(/\/jobs\/results\/(\d{5,})/i)?.[1] ??
     url.pathname.match(/\/details\/([0-9-]+)/i)?.[1] ??
     url.pathname.match(/\/detail\/(\d{5,})/i)?.[1] ??
+    url.pathname.match(/\/listing\/(\d{5,})/i)?.[1] ??
     url.pathname.match(/\/JobDetail\/[^/]+\/(\d+)/i)?.[1] ??
     url.pathname.match(/\/job\/([A-Za-z0-9_-]{6,})/i)?.[1] ??
     // Ashby: /notion/<uuid>
