@@ -242,6 +242,8 @@ async function extractJobsFromJson(
       (typeof row.Title === "string" && row.Title) ||
       (typeof row.posting_name === "string" && row.posting_name) ||
       (typeof row.name === "string" && row.name) ||
+      // Spotify Life at Spotify search: { text, id, … }
+      (typeof row.text === "string" && row.text) ||
       "";
     const title = titleRaw.replace(/\s+/g, " ").trim();
     const boardId =
@@ -325,6 +327,8 @@ function jsonJobRows(data: unknown, company: Company): unknown[] | null {
   if (Array.isArray(obj.positions)) return unwrapJsonJobHits(obj.positions);
   // Snap careers: { body: [{ _source: { title, absolute_url, … } }] }
   if (Array.isArray(obj.body)) return unwrapJsonJobHits(obj.body);
+  // Spotify Life at Spotify: { result: [{ id, text, … }], main_categories }
+  if (Array.isArray(obj.result)) return unwrapJsonJobHits(obj.result);
 
   // Phenom widgets: { refineSearch: { data: { jobs: [...] } } }
   const refine = obj.refineSearch;
@@ -395,6 +399,20 @@ function jsonLocationText(row: Record<string, unknown>): string {
       .map((office) => {
         if (!office || typeof office !== "object") return "";
         const o = office as { location?: unknown; name?: unknown };
+        if (typeof o.location === "string" && o.location) return o.location;
+        if (typeof o.name === "string" && o.name) return o.name;
+        return "";
+      })
+      .filter(Boolean);
+    if (parts.length) return parts.join("; ");
+  }
+  // Spotify: locations: [{ location: "New York", slug: "new-york" }]
+  if (Array.isArray(row.locations)) {
+    const parts = row.locations
+      .map((loc) => {
+        if (typeof loc === "string") return loc;
+        if (!loc || typeof loc !== "object") return "";
+        const o = loc as { location?: unknown; name?: unknown };
         if (typeof o.location === "string" && o.location) return o.location;
         if (typeof o.name === "string" && o.name) return o.name;
         return "";

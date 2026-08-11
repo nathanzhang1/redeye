@@ -80,6 +80,7 @@ Configured in [`src/companies.ts`](src/companies.ts).
 - **Snap** — Engineering + Regular + US hubs via `/api/jobs`; new-grad/SWE keywords; exclude `Intern`
 - **Airbnb** — Software Engineering / Eng & Technology + US (Greenhouse); new-grad/SWE keywords; exclude `Intern`
 - **DoorDash** — Engineering (Greenhouse) + title must include `Entry-Level`; new-grad/SWE keywords; exclude `Intern`
+- **Spotify** — eng categories + US hubs + Early Career Program (`/job/search`); `all_jobs`; exclude `Intern`
 - **Meta** — newest-first FT search (MPK/NYC/Bellevue); `browser` + `all_jobs` + title must include `University Grad`
 - **Apple** — Fresh Graduates (General) + US SWE/ML teams; `html` + `all_jobs` (`/details/<id>/<slug>`)
 - **Google** — Early + US + Bachelor's + Campus query; `html` + `all_jobs` + title must include `Campus`

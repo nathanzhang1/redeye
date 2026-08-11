@@ -451,6 +451,20 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
+    id: "spotify",
+    name: "Spotify",
+    // Eng categories + US hubs + Early Career Program (currently empty).
+    // Human UI: https://www.lifeatspotify.com/jobs?c=backend&c=client-c&c=data&c=developer-tools-infrastructure&c=engineering-leadership&c=machine-learning&c=mobile&c=network-engineering-it&c=security&c=tech-research&c=web&l=united-states-of-america-home-mix&l=new-york&l=boston&l=los-angeles&l=washington-d-c&j=early-career-program
+    // API mirrors URL filters; all early-career hits except Intern titles.
+    url: "https://api.lifeatspotify.com/wp-json/animal/v1/job/search?c=backend%2Cclient-c%2Cdata%2Cdeveloper-tools-infrastructure%2Cengineering-leadership%2Cmachine-learning%2Cmobile%2Cnetwork-engineering-it%2Csecurity%2Ctech-research%2Cweb&l=united-states-of-america-home-mix%2Cnew-york%2Cboston%2Clos-angeles%2Cwashington-d-c&j=early-career-program",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /jobs/<slug>
+    jobPathPattern: String.raw`/jobs/[a-z0-9-]+`,
+    jobUrlTemplate: "https://www.lifeatspotify.com/jobs/{id}",
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams
