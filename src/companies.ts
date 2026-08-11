@@ -255,6 +255,20 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
+    id: "ramp",
+    name: "Ramp",
+    // Emerging Talent page lists Ashby team "Emerging Talent - SWE" (hash isn't a filter).
+    // Human UI: https://ramp.com/emerging-talent#jobs
+    // New-grad + SWE keywords; drop Intern/Internship titles.
+    url: "https://api.ashbyhq.com/posting-api/job-board/ramp",
+    fetchMode: "html",
+    matchMode: "keywords",
+    // Ashby detail: /ramp/<uuid>
+    jobPathPattern: String.raw`/ramp/[0-9a-f-]{36}`,
+    departmentIncludes: ["Emerging Talent - SWE"],
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams
