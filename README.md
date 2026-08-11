@@ -72,6 +72,7 @@ Configured in [`src/companies.ts`](src/companies.ts).
 - **Robinhood** — Early Talent and Internships bucket; Greenhouse JSON + new-grad/SWE keywords; exclude `Intern`/`Internship`
 - **Shopify** — careers XML feed (Engineering & Data page); new-grad/SWE keywords; exclude `Intern`/`Internship`
 - **Ramp** — Emerging Talent - SWE Ashby team; new-grad/SWE keywords; exclude `Intern`/`Internship`
+- **Cloudflare** — title `Engineer` (mirrors careers search); Greenhouse JSON + new-grad/SWE keywords
 - **Meta** — newest-first FT search (MPK/NYC/Bellevue); `browser` + `all_jobs` + title must include `University Grad`
 - **Apple** — Fresh Graduates (General) + US SWE/ML teams; `html` + `all_jobs` (`/details/<id>/<slug>`)
 - **Google** — Early + US + Bachelor's + Campus query; `html` + `all_jobs` + title must include `Campus`

@@ -269,6 +269,19 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
+    id: "cloudflare",
+    name: "Cloudflare",
+    // Careers search=Engineer (client-side); Greenhouse board + title Engineer.
+    // Human UI: https://www.cloudflare.com/careers/jobs/?search=Engineer
+    // New-grad + SWE keywords (intern Engineer roles won't match new-grad terms).
+    url: "https://boards-api.greenhouse.io/v1/boards/cloudflare/jobs?content=false",
+    fetchMode: "html",
+    matchMode: "keywords",
+    // Detail: /cloudflare/jobs/<id>
+    jobPathPattern: String.raw`/jobs/\d+`,
+    titleIncludes: ["Engineer"],
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams
