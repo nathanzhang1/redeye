@@ -85,6 +85,7 @@ Configured in [`src/companies.ts`](src/companies.ts).
 - **GitHub** — Engineering + IC + US (Jibe `/api/jobs`); new-grad/SWE keywords; exclude `Intern`
 - **Asana** — Early Career Programs (Greenhouse; university-recruiting); title `Engineer`; exclude `Intern`
 - **DocuSign** — University / New Grad (Jibe `categories=University`); title `Engineer`; exclude `Intern`
+- **Pinterest** — University / University Engineering (Greenhouse); SWE-adjacent titles (`Engineer`/`Software`/`ML`)
 - **Meta** — newest-first FT search (MPK/NYC/Bellevue); `browser` + `all_jobs` + title must include `University Grad`
 - **Apple** — Fresh Graduates (General) + US SWE/ML teams; `html` + `all_jobs` (`/details/<id>/<slug>`)
 - **Google** — Early + US + Bachelor's + Campus query; `html` + `all_jobs` + title must include `Campus`

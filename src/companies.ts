@@ -528,6 +528,20 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
+    id: "pinterest",
+    name: "Pinterest",
+    // University department page (Explore open roles; empty today — CF blocks HTML).
+    // Human UI: https://www.pinterestcareers.com/departments/university/
+    // Greenhouse University + University Engineering; SWE-adjacent titles.
+    url: "https://boards-api.greenhouse.io/v1/boards/pinterest/departments",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /jobs/?gh_jid=<id>
+    jobPathPattern: String.raw`/jobs/`,
+    departmentIncludes: ["University", "University Engineering"],
+    titleIncludes: ["Engineer", "SWE", "Software", "Machine Learning"],
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams
