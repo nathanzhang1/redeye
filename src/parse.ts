@@ -360,9 +360,18 @@ function jsonJobRows(data: unknown, company: Company): unknown[] | null {
       if (Array.isArray(jobs)) return unwrapJsonJobHits(jobs);
     }
   }
+  // Ashby GraphQL: { data: { jobBoard: { teams, jobPostings } } }
   // Phenom-ish: { data: { jobs: [...] } }
   if (obj.data && typeof obj.data === "object") {
-    const jobs = (obj.data as { jobs?: unknown }).jobs;
+    const dataObj = obj.data as Record<string, unknown>;
+    const board = dataObj.jobBoard;
+    if (board && typeof board === "object") {
+      const ashby = ashbyGraphQlJobRows(
+        board as { teams?: unknown[]; jobPostings?: unknown[] },
+      );
+      if (ashby) return ashby;
+    }
+    const jobs = dataObj.jobs;
     if (Array.isArray(jobs)) return unwrapJsonJobHits(jobs);
   }
 
@@ -407,6 +416,36 @@ function unwrapJsonJobHits(rows: unknown[]): unknown[] {
       }
     }
     return raw;
+  });
+}
+
+/** Attach team names so departmentIncludes can match Ashby GraphQL postings. */
+function ashbyGraphQlJobRows(board: {
+  teams?: unknown[];
+  jobPostings?: unknown[];
+}): unknown[] | null {
+  if (!Array.isArray(board.jobPostings)) return null;
+  const teamName = new Map<string, string>();
+  for (const raw of board.teams ?? []) {
+    if (!raw || typeof raw !== "object") continue;
+    const team = raw as { id?: unknown; name?: unknown };
+    if (typeof team.id === "string" && typeof team.name === "string") {
+      teamName.set(team.id, team.name);
+    }
+  }
+  return board.jobPostings.map((raw) => {
+    if (!raw || typeof raw !== "object") return raw;
+    const job = raw as Record<string, unknown>;
+    const teamId = typeof job.teamId === "string" ? job.teamId : "";
+    const team = teamName.get(teamId) ?? "";
+    const locationName =
+      typeof job.locationName === "string" ? job.locationName : "";
+    return {
+      ...job,
+      team,
+      department: team,
+      ...(locationName ? { location: locationName } : {}),
+    };
   });
 }
 

@@ -542,6 +542,37 @@ export const COMPANIES: Company[] = [
     titleIncludes: ["Engineer", "SWE", "Software", "Machine Learning"],
   },
   {
+    id: "openai",
+    name: "OpenAI",
+    // Applied AI / FDE / Codex / Core Platform teams + San Francisco (UUID filters on site).
+    // Human UI: https://openai.com/careers/search/?c=923a141e-…&l=bbd9f7fe-… (SF)
+    // Ashby GraphQL (posting-api is ~12MB); new-grad + SWE keywords; drop Intern.
+    url: "https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams",
+    fetchMode: "html",
+    matchMode: "keywords",
+    // Detail: /openai/<uuid>
+    jobPathPattern: String.raw`/openai/[0-9a-f-]{36}`,
+    jobUrlTemplate: "https://jobs.ashbyhq.com/openai/{id}",
+    fetchBody: {
+      operationName: "ApiJobBoardWithTeams",
+      variables: { organizationHostedJobsPageName: "openai" },
+      query:
+        "query ApiJobBoardWithTeams($organizationHostedJobsPageName: String!) { jobBoard: jobBoardWithTeams(organizationHostedJobsPageName: $organizationHostedJobsPageName) { teams { id name parentTeamId } jobPostings { id title teamId locationId locationName employmentType } } }",
+    },
+    departmentIncludes: [
+      "Forward Deployed Engineering",
+      "Applied AI",
+      "Applied AI Engineering",
+      "Applied AI Infrastructure",
+      "B2B Applications",
+      "Codex - Engineering",
+      "Core Product & Platform",
+      "Core Product & Platform | API",
+    ],
+    locationIncludes: ["San Francisco"],
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams
