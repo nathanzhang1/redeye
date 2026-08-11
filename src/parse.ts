@@ -113,10 +113,18 @@ export async function extractJobs(
   for (const match of anchors) {
     const attrs = match[1] ?? "";
     const inner = match[2] ?? "";
-    const hrefMatch = attrs.match(/\bhref\s*=\s*(["'])(.*?)\1/i);
-    if (!hrefMatch) continue;
-
-    const href = hrefMatch[2].trim();
+    // Phenom (Snowflake GenSWE) can emit duplicate href attrs: CMS junk first,
+    // then the real https://…/job/… URL. Prefer a real absolute job URL.
+    const hrefCandidates = [
+      ...attrs.matchAll(/\bhref\s*=\s*(["'])(.*?)\1/gi),
+    ].map((m) => m[2].trim());
+    const href =
+      hrefCandidates.find(
+        (h) => /^https?:\/\//i.test(h) && /\/job\//i.test(h),
+      ) ??
+      hrefCandidates.find((h) => /^https?:\/\//i.test(h)) ??
+      hrefCandidates.find((h) => h.startsWith("/")) ??
+      hrefCandidates[0];
     if (!href || href.startsWith("#") || href.startsWith("javascript:")) {
       continue;
     }
@@ -146,9 +154,18 @@ export async function extractJobs(
         }
       }
     }
-    if (!title || title.length > 300 || /^learn more$/i.test(title)) {
+    // Phenom (Snowflake GenSWE): empty link text + "Click to apply…" aria — use URL slug.
+    if (
+      !title ||
+      title.length > 300 ||
+      /^learn more$/i.test(title) ||
+      /^click to apply\b/i.test(title)
+    ) {
       // Google: /jobs/results/<id>-software-engineer-early-career-campus
-      const slugTitle = titleFromGoogleSlug(absolute.pathname);
+      // Phenom: /us/en/job/<id>/Software-Engineer-Backend
+      const slugTitle =
+        titleFromGoogleSlug(absolute.pathname) ??
+        titleFromJobPathSlug(absolute.pathname);
       if (slugTitle) {
         title = slugTitle;
       } else {
@@ -719,5 +736,16 @@ function titleFromGoogleSlug(pathname: string): string | null {
     .filter(Boolean)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
+  return titled || null;
+}
+
+/** /us/en/job/<id>/Software-Engineer-Backend -> "Software Engineer Backend" */
+function titleFromJobPathSlug(pathname: string): string | null {
+  const m = pathname.match(/\/job\/[^/]+\/([^/?#]+)/i);
+  if (!m?.[1]) return null;
+  const titled = m[1]
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   return titled || null;
 }

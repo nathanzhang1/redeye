@@ -465,6 +465,18 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
+    id: "snowflake",
+    name: "Snowflake",
+    // GenSWE early-career landing (roles embedded as Phenom job cards).
+    // Human UI: https://careers.snowflake.com/us/en/generalsoftwareengineeringprogram
+    // Any /us/en/job/ card on this page (currently Software Engineer - Backend).
+    url: "https://careers.snowflake.com/us/en/generalsoftwareengineeringprogram",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /us/en/job/<id>/<slug>
+    jobPathPattern: String.raw`/us/en/job/[^/]+/[^/]+`,
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams
