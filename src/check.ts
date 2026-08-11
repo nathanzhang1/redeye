@@ -1,12 +1,22 @@
-import { fetchRenderedHtml } from "./browser";
+import {
+  BrowserRateLimitError,
+  fetchRenderedHtml,
+} from "./browser";
 import { COMPANIES, type Company } from "./companies";
 import { notifyNewJobs, notifyScrapeFailure } from "./discord";
 import { extractJobs, fetchCareerPage, type JobListing } from "./parse";
 import {
+  BROWSER_MIN_INTERVAL_MS,
+  MAX_BROWSER_COMPANIES_PER_RUN,
+  browserDueMs,
+  getBrowserCooldownUntil,
+  getBrowserLastAttempt,
   hasSeenJob,
   isBootstrapped,
+  markBrowserAttempt,
   markJobSeen,
   seedJobs,
+  setBrowserCooldown,
   shouldAlertFailure,
 } from "./seen";
 import { saveLastRun, saveRunStatus } from "./status";
@@ -16,17 +26,15 @@ export type CheckSummary = {
   newJobs: number;
   seeded: number;
   failures: number;
+  skipped: number;
   details: Array<{
     companyId: string;
-    status: "ok" | "seeded" | "failed";
+    status: "ok" | "seeded" | "failed" | "skipped";
     matched: number;
     notified: number;
     error?: string;
   }>;
 };
-
-/** Space out Browser Run calls — free tier rate-limits (~few/min). */
-const BROWSER_GAP_MS = 20_000;
 
 export async function checkAll(env: Env): Promise<CheckSummary> {
   const summary: CheckSummary = {
@@ -34,23 +42,57 @@ export async function checkAll(env: Env): Promise<CheckSummary> {
     newJobs: 0,
     seeded: 0,
     failures: 0,
+    skipped: 0,
     details: [],
   };
 
-  let previousWasBrowser = false;
+  const browserPlan = await planBrowserCompanies(env.SEEN_JOBS);
+
   for (const company of COMPANIES) {
     const usesBrowser = (company.fetchMode ?? "html") === "browser";
-    if (usesBrowser && previousWasBrowser) {
-      await sleep(BROWSER_GAP_MS);
+    if (usesBrowser && !browserPlan.runIds.has(company.id)) {
+      const reason =
+        browserPlan.skipReasons.get(company.id) ??
+        "Browser poll skipped (quota budget)";
+      const detail = {
+        companyId: company.id,
+        status: "skipped" as const,
+        matched: 0,
+        notified: 0,
+        error: reason,
+      };
+      summary.details.push(detail);
+      summary.skipped += 1;
+      await saveRunStatus(env.SEEN_JOBS, company, detail);
+      console.log(
+        JSON.stringify({
+          event: "company_skipped",
+          companyId: company.id,
+          reason,
+        }),
+      );
+      continue;
     }
 
     const detail = await checkCompany(env, company);
     summary.details.push(detail);
     if (detail.status === "failed") summary.failures += 1;
     if (detail.status === "seeded") summary.seeded += 1;
+    if (detail.status === "skipped") summary.skipped += 1;
     summary.newJobs += detail.notified;
     await saveRunStatus(env.SEEN_JOBS, company, detail);
-    previousWasBrowser = usesBrowser;
+
+    if (
+      usesBrowser &&
+      detail.status === "failed" &&
+      detail.error?.includes("429")
+    ) {
+      await setBrowserCooldown(env.SEEN_JOBS);
+      // Drop any remaining planned browser companies this run.
+      for (const id of [...browserPlan.runIds]) {
+        if (id !== company.id) browserPlan.runIds.delete(id);
+      }
+    }
   }
 
   await saveLastRun(env.SEEN_JOBS, summary);
@@ -58,15 +100,74 @@ export async function checkAll(env: Env): Promise<CheckSummary> {
   return summary;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+async function planBrowserCompanies(kv: KVNamespace): Promise<{
+  runIds: Set<string>;
+  skipReasons: Map<string, string>;
+}> {
+  const skipReasons = new Map<string, string>();
+  const runIds = new Set<string>();
+  const now = Date.now();
+
+  const cooldownUntil = await getBrowserCooldownUntil(kv);
+  if (cooldownUntil && cooldownUntil > now) {
+    const mins = Math.ceil((cooldownUntil - now) / 60_000);
+    for (const company of COMPANIES) {
+      if ((company.fetchMode ?? "html") === "browser") {
+        skipReasons.set(
+          company.id,
+          `Browser Run cooldown (~${mins}m left after 429; free tier ~10 min/day)`,
+        );
+      }
+    }
+    return { runIds, skipReasons };
+  }
+
+  type Candidate = { id: string; last: number | null; dueIn: number };
+  const due: Candidate[] = [];
+  const notDue: Candidate[] = [];
+
+  for (const company of COMPANIES) {
+    if ((company.fetchMode ?? "html") !== "browser") continue;
+    const last = await getBrowserLastAttempt(kv, company.id);
+    const dueIn = browserDueMs(last, now);
+    const row = { id: company.id, last, dueIn };
+    if (dueIn === 0) due.push(row);
+    else notDue.push(row);
+  }
+
+  // Oldest last-attempt first; never-run companies first among those.
+  due.sort((a, b) => (a.last ?? 0) - (b.last ?? 0));
+
+  for (const row of due.slice(0, MAX_BROWSER_COMPANIES_PER_RUN)) {
+    runIds.add(row.id);
+  }
+  for (const row of due.slice(MAX_BROWSER_COMPANIES_PER_RUN)) {
+    skipReasons.set(
+      row.id,
+      `Browser slot used by another company this run (max ${MAX_BROWSER_COMPANIES_PER_RUN}; interval ${BROWSER_MIN_INTERVAL_MS / 60_000}m)`,
+    );
+  }
+  for (const row of notDue) {
+    const mins = Math.ceil(row.dueIn / 60_000);
+    skipReasons.set(
+      row.id,
+      `Next browser poll in ~${mins}m (free tier budget; every ${BROWSER_MIN_INTERVAL_MS / 60_000}m)`,
+    );
+  }
+
+  return { runIds, skipReasons };
 }
 
 async function checkCompany(
   env: Env,
   company: Company,
 ): Promise<CheckSummary["details"][number]> {
+  const usesBrowser = (company.fetchMode ?? "html") === "browser";
   try {
+    if (usesBrowser) {
+      await markBrowserAttempt(env.SEEN_JOBS, company.id);
+    }
+
     const html = await loadPage(env, company);
     const jobs = await extractJobs(company, html);
     const bootstrapped = await isBootstrapped(env.SEEN_JOBS, company.id);
@@ -135,27 +236,36 @@ async function checkCompany(
       }),
     );
 
+    if (error instanceof BrowserRateLimitError) {
+      await setBrowserCooldown(env.SEEN_JOBS);
+    }
+
     if (env.DISCORD_WEBHOOK_URL) {
-      const alert = await shouldAlertFailure(env.SEEN_JOBS, company.id);
-      if (alert) {
-        try {
-          await notifyScrapeFailure(
-            env.DISCORD_WEBHOOK_URL,
-            company.name,
-            message,
-            env.DISCORD_USER_ID,
-          );
-        } catch (notifyError) {
-          console.log(
-            JSON.stringify({
-              event: "failure_notify_failed",
-              companyId: company.id,
-              error:
-                notifyError instanceof Error
-                  ? notifyError.message
-                  : String(notifyError),
-            }),
-          );
+      // Don't Discord-spam on expected free-tier 429s.
+      const isRateLimit =
+        error instanceof BrowserRateLimitError || message.includes("429");
+      if (!isRateLimit) {
+        const alert = await shouldAlertFailure(env.SEEN_JOBS, company.id);
+        if (alert) {
+          try {
+            await notifyScrapeFailure(
+              env.DISCORD_WEBHOOK_URL,
+              company.name,
+              message,
+              env.DISCORD_USER_ID,
+            );
+          } catch (notifyError) {
+            console.log(
+              JSON.stringify({
+                event: "failure_notify_failed",
+                companyId: company.id,
+                error:
+                  notifyError instanceof Error
+                    ? notifyError.message
+                    : String(notifyError),
+              }),
+            );
+          }
         }
       }
     }
@@ -177,7 +287,9 @@ async function loadPage(env: Env, company: Company): Promise<string> {
         "BROWSER binding missing — add browser.binding in wrangler.jsonc",
       );
     }
-    return fetchRenderedHtml(env.BROWSER, company.url);
+    return fetchRenderedHtml(env.BROWSER, company.url, {
+      waitForSelector: company.browserWaitForSelector,
+    });
   }
 
   const html = await fetchCareerPage(company.url);

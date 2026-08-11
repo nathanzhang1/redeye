@@ -3,7 +3,7 @@ import { isBootstrapped } from "./seen";
 
 export type CompanyCheckDetail = {
   companyId: string;
-  status: "ok" | "seeded" | "failed";
+  status: "ok" | "seeded" | "failed" | "skipped";
   matched: number;
   notified: number;
   error?: string;
@@ -15,7 +15,7 @@ export type CompanyRunStatus = {
   url: string;
   fetchMode: "html" | "browser";
   matchMode: "keywords" | "all_jobs";
-  status: "ok" | "seeded" | "failed" | "never";
+  status: "ok" | "seeded" | "failed" | "skipped" | "never";
   matched: number;
   notified: number;
   error?: string;
@@ -29,6 +29,7 @@ export type LastRunRecord = {
   newJobs: number;
   seeded: number;
   failures: number;
+  skipped?: number;
   details: CompanyCheckDetail[];
 };
 
@@ -72,6 +73,7 @@ export async function saveLastRun(
     newJobs: number;
     seeded: number;
     failures: number;
+    skipped?: number;
     details: CompanyCheckDetail[];
   },
 ): Promise<void> {
@@ -81,6 +83,7 @@ export async function saveLastRun(
     newJobs: summary.newJobs,
     seeded: summary.seeded,
     failures: summary.failures,
+    skipped: summary.skipped ?? 0,
     details: summary.details,
   };
   await kv.put(LAST_RUN_KEY, JSON.stringify(record));
@@ -151,7 +154,7 @@ export function renderStatusHtml(status: TrackerStatus): string {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Redeye status</title>
   <style>
-    :root { color-scheme: light dark; --ok:#16a34a; --fail:#dc2626; --seed:#2563eb; --never:#6b7280; }
+    :root { color-scheme: light dark; --ok:#16a34a; --fail:#dc2626; --seed:#2563eb; --skip:#d97706; --never:#6b7280; }
     body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 1.25rem; line-height: 1.4; }
     h1 { font-size: 1.25rem; margin: 0 0 .5rem; }
     .meta { color: #6b7280; margin-bottom: 1rem; font-size: .9rem; }
@@ -162,8 +165,10 @@ export function renderStatusHtml(status: TrackerStatus): string {
     .badge.ok { background: var(--ok); }
     .badge.failed { background: var(--fail); }
     .badge.seeded { background: var(--seed); }
+    .badge.skipped { background: var(--skip); }
     .badge.never { background: var(--never); }
     .err { margin-top: .35rem; color: var(--fail); font-size: .8rem; word-break: break-word; }
+    .badge.skipped + .err, td:has(.badge.skipped) .err { color: var(--skip); }
     code { font-size: .8rem; }
     a { color: inherit; }
   </style>
@@ -175,7 +180,7 @@ export function renderStatusHtml(status: TrackerStatus): string {
     Last run: <strong>${status.lastRunAt ? escapeHtml(status.lastRunAt) : "never"}</strong>
     ${
       status.lastRun
-        ? ` · companies ${status.lastRun.companies} · new ${status.lastRun.newJobs} · failures ${status.lastRun.failures}`
+        ? ` · companies ${status.lastRun.companies} · new ${status.lastRun.newJobs} · failures ${status.lastRun.failures} · skipped ${status.lastRun.skipped ?? 0}`
         : ""
     }
   </div>

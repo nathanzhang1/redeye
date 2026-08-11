@@ -10,6 +10,11 @@ export type Company = {
    */
   fetchMode?: "html" | "browser";
   /**
+   * CSS selector for Browser Run waitForSelector (faster than networkidle).
+   * Only used when fetchMode is "browser".
+   */
+  browserWaitForSelector?: string;
+  /**
    * keywords — title/URL must match new-grad + SWE keywords (default)
    * all_jobs — any job detail link matching jobPathPattern
    *            (use when the URL is already filtered, e.g. Meta University Grad)
@@ -107,6 +112,19 @@ export const COMPANIES: Company[] = [
     jobPathPattern: String.raw`/careers/job/\d+`,
   },
   {
+    id: "stripe",
+    name: "Stripe",
+    // US + Full time + title "New Grad". Page filters are client-side; we parse
+    // __NEXT_DATA__ jobIndexData (see extractJobs).
+    // Human UI: https://stripe.com/careers/search?query=New+Grad&locations=North+America--United+States&employment_types=Full+time
+    url: "https://stripe.com/careers/search",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /careers/listing/<slug>/<greenhouseId>
+    jobPathPattern: String.raw`/careers/listing/[^/]+/\d+`,
+    titleIncludes: ["New Grad"],
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams
@@ -132,6 +150,8 @@ export const COMPANIES: Company[] = [
     name: "Meta",
     url: "https://www.metacareers.com/jobsearch/?sort_by_new=true&teams[0]=Product%20Management&teams[1]=Data%20%26%20Analytics&teams[2]=Software%20Engineering&teams[3]=University%20Grad%20-%20Engineering%2C%20Tech%20%26%20Design&offices[0]=Menlo%20Park%2C%20CA&offices[1]=New%20York%2C%20NY&offices[2]=Bellevue%2C%20WA&roles[0]=Full%20time%20employment",
     fetchMode: "browser",
+    browserWaitForSelector:
+      'a[href*="job_details"], a[href*="/jobs/"]',
     matchMode: "all_jobs",
     // Meta detail pages: /profile/job_details/<id> (older: /jobs/<id>)
     jobPathPattern: String.raw`/(?:profile/job_details|jobs)/\d+`,
@@ -142,6 +162,9 @@ export const COMPANIES: Company[] = [
     name: "NVIDIA",
     url: "https://jobs.nvidia.com/careers?start=0&location=united+states&pid=893396905668&sort_by=timestamp&filter_include_remote=1&filter_include_relocation=0&filter_job_category=engineering&filter_work_location_option=office&filter_job_type=new+college+graduate&filter_time_type=full+time",
     fetchMode: "browser",
+    // Page may show zero New College Grad 2027 roles — wait for job cards or empty state.
+    browserWaitForSelector:
+      'a[href*="/careers/job/"], [class*="position"], [class*="no-result"], [class*="NoResult"]',
     matchMode: "all_jobs",
     // Eightfold: /careers/job/<pid>
     jobPathPattern: String.raw`/careers/job/\d+`,

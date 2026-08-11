@@ -70,6 +70,12 @@ export async function extractJobs(
     return extractJobsFromJson(company, trimmed);
   }
 
+  // Stripe careers embeds a full job index in __NEXT_DATA__ (URL filters are client-side).
+  if (company.id === "stripe") {
+    const fromIndex = await extractStripeJobIndex(company, html);
+    if (fromIndex) return fromIndex;
+  }
+
   const base = new URL(company.url);
   const matchMode = company.matchMode ?? "keywords";
   const jobPathRe = new RegExp(
@@ -295,6 +301,116 @@ function jsonJobRows(data: unknown): unknown[] | null {
   return null;
 }
 
+type StripeLocation = {
+  name: string;
+  countryCode?: string;
+  parentLocationIndex?: number;
+};
+
+type StripeListing = {
+  greenhouseId: number;
+  title: string;
+  slug: string;
+  locationIndices: number[];
+  employmentType?: string;
+};
+
+/**
+ * Stripe careers search: filter US + Full time + titleIncludes from embedded index.
+ * Matches locations under the "United States" node (North America → United States).
+ */
+async function extractStripeJobIndex(
+  company: Company,
+  html: string,
+): Promise<JobListing[] | null> {
+  const match = html.match(
+    /<script id="__NEXT_DATA__"[^>]*>(?<json>[\s\S]*?)<\/script>/i,
+  );
+  if (!match?.groups?.json) return null;
+
+  let data: {
+    props?: {
+      pageProps?: {
+        jobIndexData?: {
+          filters?: { locations?: StripeLocation[] };
+          listings?: StripeListing[];
+        };
+      };
+    };
+  };
+  try {
+    data = JSON.parse(match.groups.json);
+  } catch {
+    return null;
+  }
+
+  const index = data.props?.pageProps?.jobIndexData;
+  const locations = index?.filters?.locations;
+  const listings = index?.listings;
+  if (!Array.isArray(locations) || !Array.isArray(listings)) return null;
+
+  const usRoot = locations.findIndex((loc) => loc.name === "United States");
+  if (usRoot < 0) {
+    throw new Error("Stripe job index missing United States location node");
+  }
+
+  const underUs = new Set<number>();
+  for (let i = 0; i < locations.length; i++) {
+    if (stripeLocationUnder(locations, i, usRoot)) underUs.add(i);
+  }
+
+  const byUrl = new Map<string, JobListing>();
+  for (const listing of listings) {
+    if (!listing?.title || !listing.slug || !listing.greenhouseId) continue;
+    if (listing.employmentType !== "Full time") continue;
+
+    const inUs = (listing.locationIndices ?? []).some((idx) => underUs.has(idx));
+    if (!inUs) continue;
+
+    if (company.titleIncludes?.length) {
+      const titleLower = listing.title.toLowerCase();
+      const ok = company.titleIncludes.some((needle) =>
+        titleLower.includes(needle.toLowerCase()),
+      );
+      if (!ok) continue;
+    }
+
+    const absolute = new URL(
+      `https://stripe.com/careers/listing/${listing.slug}/${listing.greenhouseId}`,
+    );
+    const jobPathRe = new RegExp(
+      company.jobPathPattern ?? DEFAULT_JOB_PATH_PATTERN,
+      "i",
+    );
+    if (!jobPathRe.test(absolute.pathname)) continue;
+
+    const canonical = canonicalizeJobUrl(absolute);
+    const id = await jobId(company.id, canonical);
+    byUrl.set(canonical, {
+      id,
+      title: listing.title.replace(/\s+/g, " ").trim(),
+      url: canonical,
+    });
+  }
+
+  return [...byUrl.values()];
+}
+
+function stripeLocationUnder(
+  locations: StripeLocation[],
+  index: number,
+  ancestor: number,
+): boolean {
+  let current: number | undefined = index;
+  const seen = new Set<number>();
+  while (current !== undefined && !seen.has(current)) {
+    if (current === ancestor) return true;
+    seen.add(current);
+    current = locations[current]?.parentLocationIndex;
+  }
+  return false;
+}
+
 function matchesAny(haystack: string, needles: string[]): boolean {
   return needles.some((n) => haystack.includes(n));
 }
@@ -323,6 +439,7 @@ function decodeHtmlEntities(text: string): string {
 function canonicalizeJobUrl(url: URL): string {
   const boardId =
     url.pathname.match(/\/(?:profile\/job_details|jobs(?:\/view)?|careers\/job)\/(\d{5,})/i)?.[1] ??
+    url.pathname.match(/\/careers\/listing\/[^/]+\/(\d{5,})/i)?.[1] ??
     url.pathname.match(/\/jobs\/results\/(\d{5,})/i)?.[1] ??
     url.pathname.match(/\/details\/([0-9-]+)/i)?.[1] ??
     url.pathname.match(/\/job\/([A-Za-z0-9_-]{6,})/i)?.[1] ??
