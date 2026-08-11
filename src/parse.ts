@@ -160,11 +160,7 @@ export async function extractJobs(
     }
 
     if (company.titleIncludes?.length) {
-      const titleLower = title.toLowerCase();
-      const ok = company.titleIncludes.some((needle) =>
-        titleLower.includes(needle.toLowerCase()),
-      );
-      if (!ok) continue;
+      if (!titleMatchesIncludes(title, company.titleIncludes)) continue;
     }
 
     const canonical = canonicalizeJobUrl(absolute);
@@ -198,7 +194,7 @@ async function extractJobsFromJson(
     throw new Error("Career page looked like JSON but failed to parse");
   }
 
-  const jobs = jsonJobRows(data);
+  const jobs = jsonJobRows(data, company);
   if (!jobs) {
     throw new Error("JSON career feed missing jobs array");
   }
@@ -267,12 +263,11 @@ async function extractJobsFromJson(
     }
 
     if (company.titleIncludes?.length) {
-      const titleLower = title.toLowerCase();
-      const ok = company.titleIncludes.some((needle) =>
-        titleLower.includes(needle.toLowerCase()),
-      );
-      if (!ok) continue;
+      if (!titleMatchesIncludes(title, company.titleIncludes)) continue;
     }
+
+    const locationText = jsonLocationText(row);
+    if (!locationAllowed(locationText, company)) continue;
 
     const canonical = canonicalizeJobUrl(absolute);
     const id = await jobId(company.id, canonical);
@@ -282,13 +277,29 @@ async function extractJobsFromJson(
   return [...byUrl.values()];
 }
 
-function jsonJobRows(data: unknown): unknown[] | null {
+function jsonJobRows(data: unknown, company: Company): unknown[] | null {
   if (Array.isArray(data)) return data;
   if (!data || typeof data !== "object") return null;
   const obj = data as Record<string, unknown>;
   if (Array.isArray(obj.jobs)) return obj.jobs;
   // Eightfold PCS: { positions: [...], count: N }
   if (Array.isArray(obj.positions)) return obj.positions;
+
+  // Greenhouse departments: { departments: [{ name, jobs: [...] }] }
+  if (Array.isArray(obj.departments)) {
+    const wanted = (company.departmentIncludes ?? []).map((d) =>
+      d.toLowerCase(),
+    );
+    const rows: unknown[] = [];
+    for (const raw of obj.departments) {
+      if (!raw || typeof raw !== "object") continue;
+      const dept = raw as { name?: string; jobs?: unknown[] };
+      const name = (dept.name ?? "").toLowerCase();
+      if (wanted.length && !wanted.includes(name)) continue;
+      if (Array.isArray(dept.jobs)) rows.push(...dept.jobs);
+    }
+    return rows;
+  }
 
   // Oracle HCM: { items: [{ requisitionList: [...] }] }
   if (Array.isArray(obj.items)) {
@@ -299,6 +310,52 @@ function jsonJobRows(data: unknown): unknown[] | null {
     }
   }
   return null;
+}
+
+function jsonLocationText(row: Record<string, unknown>): string {
+  const location = row.location;
+  if (typeof location === "string") return location;
+  if (location && typeof location === "object") {
+    const name = (location as { name?: unknown }).name;
+    if (typeof name === "string") return name;
+  }
+  if (typeof row.PrimaryLocation === "string") return row.PrimaryLocation;
+  if (typeof row.normalized_location === "string") {
+    return row.normalized_location;
+  }
+  return "";
+}
+
+function locationAllowed(locationText: string, company: Company): boolean {
+  const loc = locationText.toLowerCase();
+  if (company.locationExcludes?.length) {
+    if (
+      company.locationExcludes.some((needle) =>
+        loc.includes(needle.toLowerCase()),
+      )
+    ) {
+      return false;
+    }
+  }
+  if (company.locationIncludes?.length) {
+    return company.locationIncludes.some((needle) =>
+      loc.includes(needle.toLowerCase()),
+    );
+  }
+  return true;
+}
+
+/** Case-insensitive; multi-word needles use substring, single tokens use word boundaries. */
+function titleMatchesIncludes(title: string, needles: string[]): boolean {
+  return needles.some((needle) => {
+    const n = needle.trim();
+    if (!n) return false;
+    if (/\s/.test(n)) {
+      return title.toLowerCase().includes(n.toLowerCase());
+    }
+    const escaped = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`\\b${escaped}\\b`, "i").test(title);
+  });
 }
 
 type StripeLocation = {
@@ -368,11 +425,7 @@ async function extractStripeJobIndex(
     if (!inUs) continue;
 
     if (company.titleIncludes?.length) {
-      const titleLower = listing.title.toLowerCase();
-      const ok = company.titleIncludes.some((needle) =>
-        titleLower.includes(needle.toLowerCase()),
-      );
-      if (!ok) continue;
+      if (!titleMatchesIncludes(listing.title, company.titleIncludes)) continue;
     }
 
     const absolute = new URL(
@@ -440,6 +493,7 @@ function canonicalizeJobUrl(url: URL): string {
   const boardId =
     url.pathname.match(/\/(?:profile\/job_details|jobs(?:\/view)?|careers\/job)\/(\d{5,})/i)?.[1] ??
     url.pathname.match(/\/careers\/listing\/[^/]+\/(\d{5,})/i)?.[1] ??
+    url.pathname.match(/\/careers\/positions\/(\d{5,})/i)?.[1] ??
     url.pathname.match(/\/jobs\/results\/(\d{5,})/i)?.[1] ??
     url.pathname.match(/\/details\/([0-9-]+)/i)?.[1] ??
     url.pathname.match(/\/job\/([A-Za-z0-9_-]{6,})/i)?.[1] ??

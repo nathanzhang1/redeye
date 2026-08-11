@@ -64,6 +64,7 @@ Configured in [`src/companies.ts`](src/companies.ts).
 - **Uber** — University / Engineering / US page; Oracle HCM JSON + `all_jobs` + title must include `Graduate`
 - **Netflix** — University Recruiting + Engineering/PM + onsite + UCAN; Eightfold JSON + `all_jobs` (`/careers/job/<pid>`)
 - **Stripe** — US + Full time careers index; `__NEXT_DATA__` + title must include `New Grad`
+- **Coinbase** — Engineering depts + CA/NY/NC non-remote; Greenhouse departments JSON + title `New Grad` / `Early` / `Graduate`
 - **Meta** — newest-first FT search (MPK/NYC/Bellevue); `browser` + `all_jobs` + title must include `University Grad`
 - **Apple** — Fresh Graduates (General) + US SWE/ML teams; `html` + `all_jobs` (`/details/<id>/<slug>`)
 - **Google** — Early + US + Bachelor's + Campus query; `html` + `all_jobs` + title must include `Campus`

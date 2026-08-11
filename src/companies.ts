@@ -23,10 +23,22 @@ export type Company = {
   /** Regex tested against pathname for all_jobs mode (default: /\/jobs\/\d+/i) */
   jobPathPattern?: string;
   /**
-   * If set, job title must include at least one of these (case-insensitive).
+   * If set, job title must match at least one (case-insensitive, word-boundary).
    * Applied after matchMode filtering.
    */
   titleIncludes?: string[];
+  /**
+   * Greenhouse-style `{ departments: [{ name, jobs }] }` feeds: only include jobs
+   * from departments whose name exactly matches one of these (case-insensitive).
+   */
+  departmentIncludes?: string[];
+  /**
+   * If set, job location text must include at least one (case-insensitive).
+   * Combined with locationExcludes when both are set.
+   */
+  locationIncludes?: string[];
+  /** If set, skip jobs whose location text includes any of these (case-insensitive). */
+  locationExcludes?: string[];
   /**
    * When a JSON feed row has an id but no URL, build one with `{id}` replaced.
    * Example: https://jobs.uber.com/en/jobs/{id}/
@@ -123,6 +135,28 @@ export const COMPANIES: Company[] = [
     // Detail: /careers/listing/<slug>/<greenhouseId>
     jobPathPattern: String.raw`/careers/listing/[^/]+/\d+`,
     titleIncludes: ["New Grad"],
+  },
+  {
+    id: "coinbase",
+    name: "Coinbase",
+    // Engineering depts + CA/NY/NC (non-remote). Title: New Grad / Early / Graduate.
+    // Human UI: https://www.coinbase.com/careers/positions?department=Engineering,...&location=ca,ny,nc
+    url: "https://boards-api.greenhouse.io/v1/boards/coinbase/departments",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /careers/positions/<id>
+    jobPathPattern: String.raw`/careers/positions/\d+`,
+    departmentIncludes: [
+      "Engineering",
+      "Engineering - Backend",
+      "Engineering - Frontend",
+      "Engineering - Infrastructure",
+      "Engineering - Managers",
+      "Engineering - Security",
+    ],
+    locationIncludes: [", CA", ", NY", ", NC", "New York", "Charlotte", "San Francisco"],
+    locationExcludes: ["Remote"],
+    titleIncludes: ["New Grad", "Early", "Graduate"],
   },
   {
     id: "apple",
