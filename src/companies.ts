@@ -513,6 +513,21 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
+    id: "docusign",
+    name: "DocuSign",
+    // UI "University & New Grad"; Jibe API category term is "University" (empty of SWE today).
+    // Human UI: https://careers.docusign.com/careers-home/jobs?categories=University%20%26%20New%20Grad&sortBy=posted_date&descending=true&page=1
+    // SWE via title Engineer; drop Intern.
+    url: "https://careers.docusign.com/api/jobs?page=1&categories=University&sortBy=posted_date&descending=true",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /careers-home/jobs/<slug>
+    jobPathPattern: String.raw`/careers-home/jobs/\d+`,
+    jobUrlTemplate: "https://careers.docusign.com/careers-home/jobs/{id}",
+    titleIncludes: ["Engineer"],
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams
