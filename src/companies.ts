@@ -79,6 +79,7 @@ export const DEFAULT_KEYWORDS = [
   "new graduate",
   "emerging talent",
   "graduate",
+  "2027",
 ] as const;
 
 export const DEFAULT_ROLE_KEYWORDS = [
@@ -410,6 +411,22 @@ export const COMPANIES: Company[] = [
     matchMode: "keywords",
     // Workday apply: /recruiting/snapchat/snap/job/<loc>/<slug>_<id>
     jobPathPattern: String.raw`/job/`,
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
+    id: "airbnb",
+    name: "Airbnb",
+    // Engineering + United States (FacetWP page is WordPress; poll Greenhouse depts).
+    // Human UI: https://careers.airbnb.com/positions/?_departments=engineering&_where_you_work=united-states&_jobs_sort=updated_at
+    // New-grad + SWE keywords; drop Intern titles.
+    url: "https://boards-api.greenhouse.io/v1/boards/airbnb/departments",
+    fetchMode: "html",
+    matchMode: "keywords",
+    // Detail: /positions/<id>
+    jobPathPattern: String.raw`/positions/\d+`,
+    departmentIncludes: ["Software Engineering", "Engineering & Technology"],
+    // Board uses "United States", "Remote - USA", "Remote - US", "San Francisco, CA", …
+    locationIncludes: ["United States", "USA", "Remote - US", ", CA"],
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
