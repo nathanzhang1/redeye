@@ -491,6 +491,28 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
+    id: "asana",
+    name: "Asana",
+    // Emerging Talent / Early Career Programs (university-recruiting page; empty today).
+    // Human UI: https://asana.com/jobs/university-recruiting#jobs
+    // Include parent + child GH depts; SWE via title Engineer; drop Intern.
+    url: "https://boards-api.greenhouse.io/v1/boards/asana/departments",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /jobs/apply/<id>
+    jobPathPattern: String.raw`/jobs/apply/\d+`,
+    departmentIncludes: [
+      "Early Career Programs",
+      "Apprenticeships",
+      "Internship",
+      "New Grad",
+      "Returnship",
+      "University",
+    ],
+    titleIncludes: ["Engineer"],
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams

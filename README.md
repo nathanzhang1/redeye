@@ -83,6 +83,7 @@ Configured in [`src/companies.ts`](src/companies.ts).
 - **Spotify** — eng categories + US hubs + Early Career Program (`/job/search`); `all_jobs`; exclude `Intern`
 - **Snowflake** — GenSWE program landing page job cards; `html` + `all_jobs` (`/us/en/job/<id>/<slug>`)
 - **GitHub** — Engineering + IC + US (Jibe `/api/jobs`); new-grad/SWE keywords; exclude `Intern`
+- **Asana** — Early Career Programs (Greenhouse; university-recruiting); title `Engineer`; exclude `Intern`
 - **Meta** — newest-first FT search (MPK/NYC/Bellevue); `browser` + `all_jobs` + title must include `University Grad`
 - **Apple** — Fresh Graduates (General) + US SWE/ML teams; `html` + `all_jobs` (`/details/<id>/<slug>`)
 - **Google** — Early + US + Bachelor's + Campus query; `html` + `all_jobs` + title must include `Campus`
