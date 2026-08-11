@@ -268,6 +268,10 @@ async function extractJobsFromJson(
       (typeof row.id === "number" && String(row.id)) ||
       (typeof row.Id === "string" && row.Id) ||
       (typeof row.Id === "number" && String(row.Id)) ||
+      // Jibe (GitHub careers): slug / req_id
+      (typeof row.slug === "string" && row.slug) ||
+      (typeof row.req_id === "string" && row.req_id) ||
+      (typeof row.req_id === "number" && String(row.req_id)) ||
       "";
     const pathOrUrl =
       (typeof row.absolute_url === "string" && row.absolute_url) ||
@@ -393,8 +397,16 @@ function jsonJobRows(data: unknown, company: Company): unknown[] | null {
 function unwrapJsonJobHits(rows: unknown[]): unknown[] {
   return rows.map((raw) => {
     if (!raw || typeof raw !== "object") return raw;
-    const source = (raw as { _source?: unknown })._source;
-    return source && typeof source === "object" ? source : raw;
+    const obj = raw as { _source?: unknown; data?: unknown };
+    if (obj._source && typeof obj._source === "object") return obj._source;
+    // Jibe (GitHub careers): { data: { title, slug, … } }
+    if (obj.data && typeof obj.data === "object") {
+      const data = obj.data as Record<string, unknown>;
+      if (typeof data.title === "string" || typeof data.slug === "string") {
+        return data;
+      }
+    }
+    return raw;
   });
 }
 
@@ -411,6 +423,9 @@ function jsonLocationText(row: Record<string, unknown>): string {
   }
   if (typeof row.primary_location === "string") return row.primary_location;
   if (typeof row.locationsText === "string") return row.locationsText;
+  if (typeof row.full_location === "string") return row.full_location;
+  if (typeof row.location_name === "string") return row.location_name;
+  if (typeof row.short_location === "string") return row.short_location;
   if (Array.isArray(row.offices)) {
     const parts = row.offices
       .map((office) => {

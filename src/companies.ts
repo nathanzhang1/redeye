@@ -477,6 +477,20 @@ export const COMPANIES: Company[] = [
     jobPathPattern: String.raw`/us/en/job/[^/]+/[^/]+`,
   },
   {
+    id: "github",
+    name: "GitHub",
+    // Engineering + IC + United States (newest first). Jibe API; page returns all SWE.
+    // Human UI: https://www.github.careers/careers-home/jobs?view=search&page=1&locations=,,United%20States&sortBy=posted_date&descending=true&tags5=Individual%20Contributor&categories=Engineering
+    // New-grad + SWE keywords on titles; drop Intern. Newest page is enough for alerts.
+    url: "https://www.github.careers/api/jobs?page=1&locations=%2C%2CUnited%20States&sortBy=posted_date&descending=true&tags5=Individual%20Contributor&categories=Engineering",
+    fetchMode: "html",
+    matchMode: "keywords",
+    // Detail: /careers-home/jobs/<slug>
+    jobPathPattern: String.raw`/careers-home/jobs/\d+`,
+    jobUrlTemplate: "https://www.github.careers/careers-home/jobs/{id}",
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams
