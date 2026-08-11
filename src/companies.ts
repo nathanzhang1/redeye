@@ -54,6 +54,10 @@ export type Company = {
    * Example: https://jobs.uber.com/en/jobs/{id}/
    */
   jobUrlTemplate?: string;
+  /**
+   * If set, POST this JSON body to `url` instead of GET (Phenom widgets, etc.).
+   */
+  fetchBody?: Record<string, unknown>;
   /** Title/URL must match at least one (new-grad signal); keywords mode only */
   keywords?: string[];
   /** Title/URL must match at least one (SWE signal); keywords mode only */
@@ -78,6 +82,22 @@ export const DEFAULT_ROLE_KEYWORDS = [
   "software developer",
   "software engineering",
   "software development engineer",
+  "frontend engineer",
+  "backend engineer",
+  "full stack engineer",
+  "mobile engineer",
+  "devops engineer",
+  "security engineer",
+  "data engineer",
+  "machine learning engineer",
+  "ai engineer",
+  "cloud engineer",
+  "network engineer",
+  "database engineer",
+  "system engineer",
+  "security engineer",
+  "forward deployed",
+  "applied ai engineer",
 ] as const;
 
 export const DEFAULT_JOB_PATH_PATTERN = String.raw`/jobs/\d+`;
@@ -294,6 +314,52 @@ export const COMPANIES: Company[] = [
     // CareerPuck detail: /job-board/lyft/job/<id>
     jobPathPattern: String.raw`/job/\d+`,
     departmentIncludes: ["Early Talent"],
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
+    id: "adobe",
+    name: "Adobe",
+    // Intern & Graduate landing filters (experienceLevel) don't persist in the URL.
+    // Human UI: https://careers.adobe.com/us/en/intern-and-graduate
+    // Phenom widgets POST with those levels; SWE via title "Software"; drop Intern.
+    url: "https://careers.adobe.com/widgets",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Workday apply: /external_experienced/job/<loc>/<slug>_R####/apply
+    jobPathPattern: String.raw`/job/[^/]+/[^/]+`,
+    fetchBody: {
+      lang: "en_us",
+      deviceType: "desktop",
+      country: "us",
+      pageName: "search-results",
+      ddoKey: "refineSearch",
+      from: 0,
+      jobs: true,
+      counts: true,
+      all_fields: [
+        "category",
+        "country",
+        "state",
+        "city",
+        "type",
+        "experienceLevel",
+      ],
+      size: 50,
+      clearAll: false,
+      jdsource: "facets",
+      isSliderEnable: false,
+      pageId: "page15",
+      siteType: "external",
+      keywords: "",
+      global: true,
+      selected_fields: {
+        experienceLevel: ["University Graduate", "University Intern"],
+      },
+      locationData: {},
+      s: "1",
+      refNum: "ADOBUS",
+    },
+    titleIncludes: ["Software"],
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {

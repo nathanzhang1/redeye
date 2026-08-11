@@ -74,6 +74,7 @@ Configured in [`src/companies.ts`](src/companies.ts).
 - **Ramp** — Emerging Talent - SWE Ashby team; new-grad/SWE keywords; exclude `Intern`/`Internship`
 - **Cloudflare** — title `Engineer` (mirrors careers search); Greenhouse JSON + new-grad/SWE keywords
 - **Lyft** — Early Talent dept; Greenhouse departments JSON + new-grad/SWE keywords; exclude `Intern`/`Internship`
+- **Adobe** — Phenom widgets `University Graduate`/`University Intern`; title `Software`; exclude `Intern`/`Internship`
 - **Meta** — newest-first FT search (MPK/NYC/Bellevue); `browser` + `all_jobs` + title must include `University Grad`
 - **Apple** — Fresh Graduates (General) + US SWE/ML teams; `html` + `all_jobs` (`/details/<id>/<slug>`)
 - **Google** — Early + US + Bachelor's + Campus query; `html` + `all_jobs` + title must include `Campus`

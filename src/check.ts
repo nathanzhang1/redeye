@@ -292,7 +292,7 @@ async function loadPage(env: Env, company: Company): Promise<string> {
     });
   }
 
-  const html = await fetchCareerPage(company.url);
+  const html = await fetchCareerPage(company.url, company.fetchBody);
   if (!html || html.length < 50) {
     throw new Error("Page HTML empty or too short (possible block/JS shell)");
   }

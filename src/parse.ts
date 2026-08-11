@@ -18,12 +18,18 @@ const FETCH_TIMEOUT_MS = 30_000;
 // Ashby boards embed full job HTML and routinely exceed 2MB.
 const MAX_HTML_BYTES = 4_000_000;
 
-export async function fetchCareerPage(url: string): Promise<string> {
+export async function fetchCareerPage(
+  url: string,
+  postBody?: Record<string, unknown>,
+): Promise<string> {
   const response = await fetch(url, {
+    method: postBody ? "POST" : "GET",
     headers: {
       "User-Agent": USER_AGENT,
       Accept: "text/html,application/xhtml+xml,application/json",
+      ...(postBody ? { "Content-Type": "application/json" } : {}),
     },
+    body: postBody ? JSON.stringify(postBody) : undefined,
     redirect: "follow",
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
@@ -251,6 +257,7 @@ async function extractJobsFromJson(
       (typeof row.job_path === "string" && row.job_path) ||
       (typeof row.jobPath === "string" && row.jobPath) ||
       (typeof row.jobUrl === "string" && row.jobUrl) ||
+      (typeof row.applyUrl === "string" && row.applyUrl) ||
       (typeof row.url === "string" && row.url) ||
       (boardId && company.jobUrlTemplate
         ? company.jobUrlTemplate.replaceAll("{id}", boardId)
@@ -316,6 +323,21 @@ function jsonJobRows(data: unknown, company: Company): unknown[] | null {
   if (Array.isArray(obj.jobs)) return obj.jobs;
   // Eightfold PCS: { positions: [...], count: N }
   if (Array.isArray(obj.positions)) return obj.positions;
+
+  // Phenom widgets: { refineSearch: { data: { jobs: [...] } } }
+  const refine = obj.refineSearch;
+  if (refine && typeof refine === "object") {
+    const refineData = (refine as { data?: unknown }).data;
+    if (refineData && typeof refineData === "object") {
+      const jobs = (refineData as { jobs?: unknown }).jobs;
+      if (Array.isArray(jobs)) return jobs;
+    }
+  }
+  // Phenom-ish: { data: { jobs: [...] } }
+  if (obj.data && typeof obj.data === "object") {
+    const jobs = (obj.data as { jobs?: unknown }).jobs;
+    if (Array.isArray(jobs)) return jobs;
+  }
 
   // Greenhouse departments: { departments: [{ name, jobs: [...] }] }
   if (Array.isArray(obj.departments)) {
@@ -612,6 +634,8 @@ function canonicalizeJobUrl(url: URL): string {
     url.pathname.match(new RegExp(String.raw`/[a-z0-9_-]+/(${uuid})$`, "i"))?.[1] ??
     // Shopify: /careers/<slug>_<uuid>
     url.pathname.match(new RegExp(String.raw`_(${uuid})$`, "i"))?.[1] ??
+    // Workday: .../Job-Title_R123456/apply
+    url.pathname.match(/_(R\d+(?:-\d+)?)(?:\/|$)/i)?.[1] ??
     url.searchParams.get("ashby_jid") ??
     url.searchParams.get("gh_jid") ??
     url.searchParams.get("jobId") ??
