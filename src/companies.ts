@@ -45,6 +45,11 @@ export type Company = {
   /** If set, skip jobs whose location text includes any of these (case-insensitive). */
   locationExcludes?: string[];
   /**
+   * Greenhouse-style job `metadata` entries: each `{ name, value }` must match
+   * (case-insensitive) an entry on the job. All listed pairs are required.
+   */
+  metadataIncludes?: { name: string; value: string }[];
+  /**
    * When a JSON feed row has an id but no URL, build one with `{id}` replaced.
    * Example: https://jobs.uber.com/en/jobs/{id}/
    */
@@ -175,6 +180,37 @@ export const COMPANIES: Company[] = [
     jobPathPattern: String.raw`/jobs/\d+`,
     departmentIncludes: ["Early Career"],
     titleExcludes: ["PhD"],
+  },
+  {
+    id: "notion",
+    name: "Notion",
+    // Early Career + San Francisco. Titles: New Grad / Early Career
+    // (Notion currently posts "Early Career"; keep New Grad for renames).
+    // Human UI: https://www.notion.com/careers?department=earlycareer&location=san-francisco-california
+    url: "https://api.ashbyhq.com/posting-api/job-board/notion",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Ashby detail: /notion/<uuid>
+    jobPathPattern: String.raw`/notion/[0-9a-f-]{36}`,
+    departmentIncludes: ["Early Career"],
+    locationIncludes: ["San Francisco"],
+    titleIncludes: ["New Grad", "Early Career"],
+  },
+  {
+    id: "datadog",
+    name: "Datadog",
+    // Early Career job type + title Engineer + USA (incl. multi-location).
+    // Human UI: https://careers.datadoghq.com/all-jobs/?time_type%5B0%5D=Early%20Career
+    url: "https://boards-api.greenhouse.io/v1/boards/datadog/jobs?content=false",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /detail/<id>/?gh_jid=<id>
+    jobPathPattern: String.raw`/detail/\d+`,
+    metadataIncludes: [
+      { name: "Early Career Time Type", value: "Early Career" },
+    ],
+    titleIncludes: ["Engineer"],
+    locationIncludes: ["USA"],
   },
   {
     id: "apple",

@@ -15,7 +15,8 @@ const USER_AGENT =
   "Mozilla/5.0 (compatible; RedeyeJobTracker/1.0; +https://github.com/redeye)";
 
 const FETCH_TIMEOUT_MS = 20_000;
-const MAX_HTML_BYTES = 2_000_000;
+// Ashby boards embed full job HTML and routinely exceed 2MB.
+const MAX_HTML_BYTES = 4_000_000;
 
 export async function fetchCareerPage(url: string): Promise<string> {
   const response = await fetch(url, {
@@ -239,11 +240,19 @@ async function extractJobsFromJson(
         row.canonicalPositionUrl) ||
       (typeof row.job_path === "string" && row.job_path) ||
       (typeof row.jobPath === "string" && row.jobPath) ||
+      (typeof row.jobUrl === "string" && row.jobUrl) ||
       (typeof row.url === "string" && row.url) ||
       (boardId && company.jobUrlTemplate
         ? company.jobUrlTemplate.replaceAll("{id}", boardId)
         : "");
     if (!title || !pathOrUrl) continue;
+
+    if (
+      company.departmentIncludes?.length &&
+      !jsonDepartmentAllowed(row, company.departmentIncludes)
+    ) {
+      continue;
+    }
 
     let absolute: URL;
     try {
@@ -270,6 +279,13 @@ async function extractJobsFromJson(
     }
     if (company.titleExcludes?.length) {
       if (titleMatchesIncludes(title, company.titleExcludes)) continue;
+    }
+
+    if (
+      company.metadataIncludes?.length &&
+      !jsonMetadataAllowed(row, company.metadataIncludes)
+    ) {
+      continue;
     }
 
     const locationText = jsonLocationText(row);
@@ -330,6 +346,48 @@ function jsonLocationText(row: Record<string, unknown>): string {
     return row.normalized_location;
   }
   return "";
+}
+
+/**
+ * Ashby-style flat rows: match department or team against departmentIncludes.
+ * Greenhouse department feeds already filter upstream and omit department on
+ * each job — if the row has no dept metadata, allow it through.
+ */
+function jsonDepartmentAllowed(
+  row: Record<string, unknown>,
+  departmentIncludes: string[],
+): boolean {
+  const wanted = departmentIncludes.map((d) => d.toLowerCase());
+  const present = [row.department, row.team, row.Department, row.Team].filter(
+    (raw): raw is string => typeof raw === "string" && raw.trim().length > 0,
+  );
+  if (!present.length) return true;
+  return present.some((raw) => wanted.includes(raw.toLowerCase()));
+}
+
+/** Greenhouse job metadata: require each name/value pair (case-insensitive). */
+function jsonMetadataAllowed(
+  row: Record<string, unknown>,
+  metadataIncludes: { name: string; value: string }[],
+): boolean {
+  const meta = row.metadata;
+  if (!Array.isArray(meta)) return false;
+  const entries = meta.filter(
+    (m): m is { name: string; value: unknown } =>
+      !!m &&
+      typeof m === "object" &&
+      typeof (m as { name?: unknown }).name === "string",
+  );
+  return metadataIncludes.every((want) => {
+    const name = want.name.toLowerCase();
+    const value = want.value.toLowerCase();
+    return entries.some(
+      (m) =>
+        m.name.toLowerCase() === name &&
+        typeof m.value === "string" &&
+        m.value.toLowerCase() === value,
+    );
+  });
 }
 
 function locationAllowed(locationText: string, company: Company): boolean {
@@ -505,7 +563,12 @@ function canonicalizeJobUrl(url: URL): string {
     url.pathname.match(/\/careers\/positions\/(\d{5,})/i)?.[1] ??
     url.pathname.match(/\/jobs\/results\/(\d{5,})/i)?.[1] ??
     url.pathname.match(/\/details\/([0-9-]+)/i)?.[1] ??
+    url.pathname.match(/\/detail\/(\d{5,})/i)?.[1] ??
     url.pathname.match(/\/job\/([A-Za-z0-9_-]{6,})/i)?.[1] ??
+    // Ashby: /notion/<uuid>
+    url.pathname.match(
+      /\/[a-z0-9_-]+\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i,
+    )?.[1] ??
     url.searchParams.get("gh_jid") ??
     url.searchParams.get("jobId") ??
     url.searchParams.get("job_id");
