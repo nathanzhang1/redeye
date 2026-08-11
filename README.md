@@ -68,6 +68,7 @@ Configured in [`src/companies.ts`](src/companies.ts).
 - **Figma** — Early Career dept only; Greenhouse departments JSON + exclude title `PhD`
 - **Notion** — Early Career + San Francisco; Ashby JSON + title `New Grad` / `Early Career`
 - **Datadog** — Early Career job type + USA; Greenhouse JSON + title `Engineer`
+- **Bloomberg** — Early Careers + NY/SF + Data/Eng/Product Avature search; `html` + `all_jobs`
 - **Meta** — newest-first FT search (MPK/NYC/Bellevue); `browser` + `all_jobs` + title must include `University Grad`
 - **Apple** — Fresh Graduates (General) + US SWE/ML teams; `html` + `all_jobs` (`/details/<id>/<slug>`)
 - **Google** — Early + US + Bachelor's + Campus query; `html` + `all_jobs` + title must include `Campus`

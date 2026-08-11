@@ -213,6 +213,17 @@ export const COMPANIES: Company[] = [
     locationIncludes: ["USA"],
   },
   {
+    id: "bloomberg",
+    name: "Bloomberg",
+    // Pre-filtered Avature search: Early Careers + NY/SF + Data / Eng&CTO / Product.
+    // Human UI: https://bloomberg.avature.net/careers/SearchJobs/?1845=...&1686=...&2562=...
+    url: "https://bloomberg.avature.net/careers/SearchJobs/?1845=%5B162508%2C162484%5D&1845_format=3996&1686=%5B55478%5D&1686_format=2312&2562=%5B219290%2C219293%2C219309%5D&2562_format=6594&listFilterMode=1&jobRecordsPerPage=12&",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /careers/JobDetail/<slug>/<id>
+    jobPathPattern: String.raw`/careers/JobDetail/[^/]+/\d+`,
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams
