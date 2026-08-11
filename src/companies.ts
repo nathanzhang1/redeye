@@ -224,6 +224,21 @@ export const COMPANIES: Company[] = [
     jobPathPattern: String.raw`/careers/JobDetail/[^/]+/\d+`,
   },
   {
+    id: "robinhood",
+    name: "Robinhood",
+    // Careers UI "Early Talent and Internships" category (hash filters don't persist).
+    // Human UI: https://careers.robinhood.com/#page-block-mzzcf1eaais
+    // Then new-grad + SWE keywords; drop Intern/Internship titles.
+    url: "https://boards-api.greenhouse.io/v1/boards/robinhood/jobs?content=false",
+    fetchMode: "html",
+    matchMode: "keywords",
+    jobPathPattern: String.raw`/jobs/\d+`,
+    metadataIncludes: [
+      { name: "Careers Page Bucket", value: "EARLY TALENT AND INTERNSHIPS" },
+    ],
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams
