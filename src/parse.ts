@@ -637,6 +637,8 @@ function canonicalizeJobUrl(url: URL): string {
     url.pathname.match(new RegExp(String.raw`_(${uuid})$`, "i"))?.[1] ??
     // Workday: .../Job-Title_R123456/apply
     url.pathname.match(/_(R\d+(?:-\d+)?)(?:\/|$)/i)?.[1] ??
+    // LinkedIn: /jobs/view/<slug>-<numericId>
+    url.pathname.match(/\/jobs\/view\/(?:[^/]+-)?(\d+)\/?$/i)?.[1] ??
     url.searchParams.get("ashby_jid") ??
     url.searchParams.get("gh_jid") ??
     url.searchParams.get("jobId") ??

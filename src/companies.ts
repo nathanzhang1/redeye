@@ -58,6 +58,11 @@ export type Company = {
    * If set, POST this JSON body to `url` instead of GET (Phenom widgets, etc.).
    */
   fetchBody?: Record<string, unknown>;
+  /**
+   * Extra pagination offsets to fetch and concatenate (e.g. LinkedIn guest
+   * `start=` pages). Each offset replaces/adds `start=` on `url`.
+   */
+  fetchStartOffsets?: number[];
   /** Title/URL must match at least one (new-grad signal); keywords mode only */
   keywords?: string[];
   /** Title/URL must match at least one (SWE signal); keywords mode only */
@@ -377,6 +382,22 @@ export const COMPANIES: Company[] = [
       { name: "Career Page Allocation", value: "Engineering" },
     ],
     locationIncludes: ["Remote - US: All locations"],
+  },
+  {
+    id: "linkedin",
+    name: "LinkedIn",
+    // Official Greenhouse board is test noise; poll public guest job search API.
+    // Human UI: companies LinkedIn/Drawbridge/Lynda + Entry + Engineering + Full-time
+    // https://www.linkedin.com/jobs/search/?f_C=1337,2587638,39939&f_E=2&f_F=eng&f_JT=F&geoId=92000000
+    // New-grad + SWE keywords; drop Intern titles. Paginate guest `start=` pages.
+    url: "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?f_C=1337%2C2587638%2C39939&f_E=2&f_F=eng&f_JT=F&geoId=92000000&sortBy=R&start=0",
+    fetchMode: "html",
+    matchMode: "keywords",
+    // Detail: /jobs/view/<slug>-<id>
+    jobPathPattern: String.raw`/jobs/view/`,
+    // Guest API ~10 cards/page; keep light to avoid LinkedIn 429s from Workers IPs.
+    fetchStartOffsets: [0, 10],
+    titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
     id: "apple",

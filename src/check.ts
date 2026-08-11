@@ -240,10 +240,11 @@ async function checkCompany(
       await setBrowserCooldown(env.SEEN_JOBS);
     }
 
+    const isRateLimit =
+      error instanceof BrowserRateLimitError || message.includes("429");
+
     if (env.DISCORD_WEBHOOK_URL) {
-      // Don't Discord-spam on expected free-tier 429s.
-      const isRateLimit =
-        error instanceof BrowserRateLimitError || message.includes("429");
+      // Don't Discord-spam on expected free-tier / LinkedIn 429s.
       if (!isRateLimit) {
         const alert = await shouldAlertFailure(env.SEEN_JOBS, company.id);
         if (alert) {
@@ -270,6 +271,17 @@ async function checkCompany(
       }
     }
 
+    // LinkedIn guest search often 429s from datacenter IPs — treat as skip.
+    if (isRateLimit && company.id === "linkedin") {
+      return {
+        companyId: company.id,
+        status: "skipped",
+        matched: 0,
+        notified: 0,
+        error: "LinkedIn rate-limited (429); will retry next cron",
+      };
+    }
+
     return {
       companyId: company.id,
       status: "failed",
@@ -292,9 +304,29 @@ async function loadPage(env: Env, company: Company): Promise<string> {
     });
   }
 
-  const html = await fetchCareerPage(company.url, company.fetchBody);
+  const html = company.fetchStartOffsets?.length
+    ? await fetchPaginatedCareerPage(company)
+    : await fetchCareerPage(company.url, company.fetchBody);
   if (!html || html.length < 50) {
     throw new Error("Page HTML empty or too short (possible block/JS shell)");
   }
   return html;
+}
+
+/** Fetch several `start=` pages (LinkedIn guest API) and concatenate HTML. */
+async function fetchPaginatedCareerPage(company: Company): Promise<string> {
+  const offsets = company.fetchStartOffsets ?? [0];
+  const chunks: string[] = [];
+  for (let i = 0; i < offsets.length; i++) {
+    if (i > 0) await sleep(750);
+    const pageUrl = new URL(company.url);
+    pageUrl.searchParams.set("start", String(offsets[i]));
+    const html = await fetchCareerPage(pageUrl.toString(), company.fetchBody);
+    if (html && html.length >= 50) chunks.push(html);
+  }
+  return chunks.join("\n");
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
