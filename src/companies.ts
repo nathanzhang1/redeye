@@ -80,6 +80,10 @@ export const DEFAULT_KEYWORDS = [
   "emerging talent",
   "graduate",
   "2027",
+  "entry",
+  "entry level",
+  "entry-level",
+  "graduation",
 ] as const;
 
 export const DEFAULT_ROLE_KEYWORDS = [
@@ -427,6 +431,23 @@ export const COMPANIES: Company[] = [
     departmentIncludes: ["Software Engineering", "Engineering & Technology"],
     // Board uses "United States", "Remote - USA", "Remote - US", "San Francisco, CA", …
     locationIncludes: ["United States", "USA", "Remote - US", ", CA"],
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
+    id: "doordash",
+    name: "DoorDash",
+    // Engineering + intern/early-career toggle (intern=1). Site is CF-blocked; Greenhouse.
+    // Human UI: https://careersatdoordash.com/job-search/?job_ids=3420554&location=&function=&intern=1&department=Engineering%7C&spage=1
+    // Require title "Entry-Level" + new-grad/SWE keywords; drop Intern titles.
+    url: "https://boards-api.greenhouse.io/v1/boards/doordashusa/jobs?content=false",
+    fetchMode: "html",
+    matchMode: "keywords",
+    // Detail: job-boards.greenhouse.io/doordashusa/jobs/<id>
+    jobPathPattern: String.raw`/jobs/\d+`,
+    metadataIncludes: [
+      { name: "Careers Page Sorting: Department", value: "Engineering" },
+    ],
+    titleIncludes: ["Entry-Level"],
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
