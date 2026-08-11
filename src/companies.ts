@@ -77,6 +77,7 @@ export const DEFAULT_ROLE_KEYWORDS = [
   "swe",
   "software developer",
   "software engineering",
+  "software development engineer",
 ] as const;
 
 export const DEFAULT_JOB_PATH_PATTERN = String.raw`/jobs/\d+`;
@@ -280,6 +281,20 @@ export const COMPANIES: Company[] = [
     // Detail: /cloudflare/jobs/<id>
     jobPathPattern: String.raw`/jobs/\d+`,
     titleIncludes: ["Engineer"],
+  },
+  {
+    id: "lyft",
+    name: "Lyft",
+    // Early Talent dept (page has no open roles right now).
+    // Human UI: https://www.lyft.com/careers/early-talent
+    // New-grad + SWE keywords; drop Intern/Internship titles.
+    url: "https://boards-api.greenhouse.io/v1/boards/lyft/departments",
+    fetchMode: "html",
+    matchMode: "keywords",
+    // CareerPuck detail: /job-board/lyft/job/<id>
+    jobPathPattern: String.raw`/job/\d+`,
+    departmentIncludes: ["Early Talent"],
+    titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
     id: "apple",
