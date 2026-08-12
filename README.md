@@ -89,6 +89,7 @@ Configured in [`src/companies.ts`](src/companies.ts).
 - **OpenAI** — Applied AI / FDE / Codex / Core Platform + SF (Ashby GraphQL); new-grad/SWE keywords; exclude `Intern`
 - **Box** — Engineering dept tree + North America (Greenhouse); new-grad/SWE keywords; exclude `Intern`
 - **Two Sigma** — Engineering + Early Careers (Avature); `all_jobs` under those filters
+- **Twitch** — Greenhouse; title must include both `Software Engineer` and `I`; exclude `Intern`
 - **Meta** — newest-first FT search (MPK/NYC/Bellevue); `browser` + `all_jobs` + title must include `University Grad`
 - **Apple** — Fresh Graduates (General) + US SWE/ML teams; `html` + `all_jobs` (`/details/<id>/<slug>`)
 - **Google** — Early + US + Bachelor's + Campus query; `html` + `all_jobs` + title must include `Campus`
@@ -102,6 +103,7 @@ Add more companies the same way, then redeploy / restart `npm run dev`.
 | `fetchMode: "browser"` | Browser Run rendered HTML |
 | `matchMode: "keywords"` | Require new-grad + SWE keywords (default) |
 | `matchMode: "all_jobs"` | Any job detail link matching `jobPathPattern` |
+| `titleIncludesAll` | Title must match **every** entry (AND); `titleIncludes` is OR |
 
 **First successful poll** for a company seeds current matches into KV **without** Discord alerts. Later polls only notify on new job ids. Zero open roles is fine (bootstrap with an empty set).
 

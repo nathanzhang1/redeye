@@ -196,6 +196,9 @@ export async function extractJobs(
     if (company.titleIncludes?.length) {
       if (!titleMatchesIncludes(title, company.titleIncludes)) continue;
     }
+    if (company.titleIncludesAll?.length) {
+      if (!titleMatchesAllIncludes(title, company.titleIncludesAll)) continue;
+    }
     if (company.titleExcludes?.length) {
       if (titleMatchesIncludes(title, company.titleExcludes)) continue;
     }
@@ -316,6 +319,9 @@ async function extractJobsFromJson(
 
     if (company.titleIncludes?.length) {
       if (!titleMatchesIncludes(title, company.titleIncludes)) continue;
+    }
+    if (company.titleIncludesAll?.length) {
+      if (!titleMatchesAllIncludes(title, company.titleIncludesAll)) continue;
     }
     if (company.titleExcludes?.length) {
       if (titleMatchesIncludes(title, company.titleExcludes)) continue;
@@ -568,6 +574,11 @@ function titleMatchesIncludes(title: string, needles: string[]): boolean {
   });
 }
 
+/** Every needle must match (AND); each needle uses titleMatchesIncludes rules. */
+function titleMatchesAllIncludes(title: string, needles: string[]): boolean {
+  return needles.every((needle) => titleMatchesIncludes(title, [needle]));
+}
+
 type StripeLocation = {
   name: string;
   countryCode?: string;
@@ -636,6 +647,10 @@ async function extractStripeJobIndex(
 
     if (company.titleIncludes?.length) {
       if (!titleMatchesIncludes(listing.title, company.titleIncludes)) continue;
+    }
+    if (company.titleIncludesAll?.length) {
+      if (!titleMatchesAllIncludes(listing.title, company.titleIncludesAll))
+        continue;
     }
     if (company.titleExcludes?.length) {
       if (titleMatchesIncludes(listing.title, company.titleExcludes)) continue;

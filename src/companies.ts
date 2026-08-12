@@ -28,8 +28,13 @@ export type Company = {
    */
   titleIncludes?: string[];
   /**
+   * If set, job title must match every entry (same matching rules as
+   * titleIncludes). Combined with titleIncludes when both are set.
+   */
+  titleIncludesAll?: string[];
+  /**
    * If set, skip jobs whose title matches any of these (same matching rules as
-   * titleIncludes). Applied after titleIncludes.
+   * titleIncludes). Applied after titleIncludes / titleIncludesAll.
    */
   titleExcludes?: string[];
   /**
@@ -624,6 +629,19 @@ export const COMPANIES: Company[] = [
     matchMode: "all_jobs",
     // Detail: /careers/JobDetail/<slug>/<id>
     jobPathPattern: String.raw`/careers/JobDetail/[^/]+/\d+`,
+  },
+  {
+    id: "twitch",
+    name: "Twitch",
+    // Careers UI filters don't persist / no new-grad facet (Greenhouse embed).
+    // Human UI: https://careers.twitch.com/en/careers
+    // Title must include both "Software Engineer" and level "I"; drop Intern.
+    url: "https://boards-api.greenhouse.io/v1/boards/twitch/jobs?content=false",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    jobPathPattern: String.raw`/jobs/\d+`,
+    titleIncludesAll: ["Software Engineer", "I"],
+    titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
     id: "apple",
