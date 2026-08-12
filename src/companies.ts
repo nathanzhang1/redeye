@@ -760,6 +760,37 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships", "Co-op", "Coop"],
   },
   {
+    id: "scale",
+    name: "Scale AI",
+    // University page "Open university roles" (Greenhouse: External Dept / University).
+    // Human UI: https://scale.com/careers/university
+    // SWE-adjacent titles; drop Intern / recruiting ops (empty SWE today).
+    url: "https://boards-api.greenhouse.io/v1/boards/scaleai/departments",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail on site: /careers/<id> (GH: job-boards.greenhouse.io/scaleai/jobs/<id>)
+    jobPathPattern: String.raw`/jobs/\d+`,
+    departmentIncludes: ["University"],
+    titleIncludes: [
+      "Software",
+      "SWE",
+      "Developer",
+      "Machine Learning",
+      "Forward Deployed",
+      "AI Engineer",
+      "Data Engineer",
+      "Security Engineer",
+      "Infrastructure",
+    ],
+    titleExcludes: [
+      "Intern",
+      "Internship",
+      "Internships",
+      "Recruiter",
+      "Recruiting",
+    ],
+  },
+  {
     id: "sig",
     name: "Susquehanna",
     // Pre-filtered: New Graduates + June 2027 Start + Philly/NY (Jibe).
