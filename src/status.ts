@@ -150,7 +150,7 @@ export function renderStatusHtml(
   const rows = status.companies
     .map((c) => {
       const checked = c.checkedAt
-        ? escapeHtml(c.checkedAt)
+        ? escapeHtml(formatPacificTime(c.checkedAt))
         : "<em>never</em>";
       const err = c.error
         ? `<div class="err">${escapeHtml(c.error)}</div>`
@@ -242,7 +242,7 @@ export function renderStatusHtml(
   <h1>Redeye status</h1>
   <div class="meta">
     Cron: <code>${escapeHtml(status.cron)}</code><br />
-    Last run: <strong>${status.lastRunAt ? escapeHtml(status.lastRunAt) : "never"}</strong>
+    Last run: <strong>${status.lastRunAt ? escapeHtml(formatPacificTime(status.lastRunAt)) : "never"}</strong>
     ${
       status.lastRun
         ? ` · companies ${status.lastRun.companies} · new ${status.lastRun.newJobs} · failures ${status.lastRun.failures} · skipped ${status.lastRun.skipped ?? 0}`
@@ -300,6 +300,23 @@ function pauseForm(
     ${companyField}
     <button class="${escapeAttr(opts.className)}" type="submit">${escapeHtml(opts.label)}</button>
   </form>`;
+}
+
+/** Display ISO timestamps in America/Los_Angeles (HTML status page only). */
+function formatPacificTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+    timeZoneName: "short",
+  }).format(date);
 }
 
 function escapeHtml(value: string): string {
