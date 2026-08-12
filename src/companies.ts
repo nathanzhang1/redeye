@@ -730,6 +730,21 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
+    id: "amd",
+    name: "AMD",
+    // Pre-filtered: new grad (tags1=Yes) + Engineering + United States (Jibe).
+    // Human UI: https://careers.amd.com/careers-home/jobs?page=1&tags1=Yes&categories=Engineering&country=United%20States&sortBy=posted_date&descending=true
+    // SWE-adjacent titles only (feed is mostly mechanical/thermal/RTL today).
+    url: "https://careers.amd.com/api/jobs?page=1&tags1=Yes&categories=Engineering&country=United%20States&sortBy=posted_date&descending=true",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /careers-home/jobs/<slug>
+    jobPathPattern: String.raw`/careers-home/jobs/\d+`,
+    jobUrlTemplate: "https://careers.amd.com/careers-home/jobs/{id}",
+    titleIncludes: ["Software", "SWE", "Developer", "Machine Learning"],
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
     id: "sig",
     name: "Susquehanna",
     // Pre-filtered: New Graduates + June 2027 Start + Philly/NY (Jibe).
