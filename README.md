@@ -88,6 +88,7 @@ Configured in [`src/companies.ts`](src/companies.ts).
 - **Pinterest** — University / University Engineering (Greenhouse); SWE-adjacent titles (`Engineer`/`Software`/`ML`)
 - **OpenAI** — Applied AI / FDE / Codex / Core Platform + SF (Ashby GraphQL); new-grad/SWE keywords; exclude `Intern`
 - **Box** — Engineering dept tree + North America (Greenhouse); new-grad/SWE keywords; exclude `Intern`
+- **Two Sigma** — Engineering + Early Careers (Avature); `all_jobs` under those filters
 - **Meta** — newest-first FT search (MPK/NYC/Bellevue); `browser` + `all_jobs` + title must include `University Grad`
 - **Apple** — Fresh Graduates (General) + US SWE/ML teams; `html` + `all_jobs` (`/details/<id>/<slug>`)
 - **Google** — Early + US + Bachelor's + Campus query; `html` + `all_jobs` + title must include `Campus`

@@ -614,6 +614,18 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
+    id: "twosigma",
+    name: "Two Sigma",
+    // Pre-filtered Avature: Function=Engineering + Experience=Early Careers.
+    // Human UI: https://careers.twosigma.com/careers/OpenRoles/?5085=[16718776]&5086=[16718736]&…
+    // Notify on every listing under those filters (empty today).
+    url: "https://careers.twosigma.com/careers/OpenRoles/?5085=%5B16718776%5D&5085_format=3148&5086=%5B16718736%5D&5086_format=3149&listFilterMode=1&jobRecordsPerPage=20&",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /careers/JobDetail/<slug>/<id>
+    jobPathPattern: String.raw`/careers/JobDetail/[^/]+/\d+`,
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams
