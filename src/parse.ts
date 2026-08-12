@@ -305,6 +305,8 @@ async function extractJobsFromJson(
       (typeof row.name === "string" && row.name) ||
       // Spotify Life at Spotify search: { text, id, … }
       (typeof row.text === "string" && row.text) ||
+      // Salesforce static careers index
+      (typeof row.Job_Posting_Title === "string" && row.Job_Posting_Title) ||
       "";
     const title = titleRaw.replace(/\s+/g, " ").trim();
     const boardId =
@@ -316,6 +318,8 @@ async function extractJobsFromJson(
       (typeof row.slug === "string" && row.slug) ||
       (typeof row.req_id === "string" && row.req_id) ||
       (typeof row.req_id === "number" && String(row.req_id)) ||
+      (typeof row.Job_Requisition_Ref_ID === "string" &&
+        row.Job_Requisition_Ref_ID) ||
       "";
     const pathOrUrl =
       (typeof row.absolute_url === "string" && row.absolute_url) ||
@@ -327,6 +331,9 @@ async function extractJobsFromJson(
       (typeof row.jobUrl === "string" && row.jobUrl) ||
       (typeof row.applyUrl === "string" && row.applyUrl) ||
       (typeof row.url === "string" && row.url) ||
+      // Salesforce Workday posting URL
+      (typeof row.External_Job_Posting_Site === "string" &&
+        row.External_Job_Posting_Site) ||
       (boardId && company.jobUrlTemplate
         ? company.jobUrlTemplate.replaceAll("{id}", boardId)
         : "");
@@ -394,6 +401,8 @@ function jsonJobRows(data: unknown, company: Company): unknown[] | null {
   if (Array.isArray(obj.jobs)) return unwrapJsonJobHits(obj.jobs);
   // Block careers: { currentPage: [...], total }
   if (Array.isArray(obj.currentPage)) return unwrapJsonJobHits(obj.currentPage);
+  // Salesforce static careers index: { Report_Entry: [...], Count }
+  if (Array.isArray(obj.Report_Entry)) return unwrapJsonJobHits(obj.Report_Entry);
   // Eightfold PCS: { positions: [...], count: N }
   if (Array.isArray(obj.positions)) return unwrapJsonJobHits(obj.positions);
   // Snap careers: { body: [{ _source: { title, absolute_url, … } }] }
@@ -509,6 +518,21 @@ function jsonLocationText(row: Record<string, unknown>): string {
     const name = (location as { name?: unknown }).name;
     if (typeof name === "string") return name;
   }
+  // Salesforce: Countries / Locations / primary location
+  {
+    const parts: string[] = [];
+    if (typeof row.Job_Requisition_Primary_Location === "string") {
+      parts.push(row.Job_Requisition_Primary_Location);
+    }
+    for (const key of ["Countries", "Locations", "Regions"] as const) {
+      const raw = row[key];
+      if (!Array.isArray(raw)) continue;
+      for (const item of raw) {
+        if (typeof item === "string" && item) parts.push(item);
+      }
+    }
+    if (parts.length) return parts.join("; ");
+  }
   if (typeof row.PrimaryLocation === "string") return row.PrimaryLocation;
   if (typeof row.normalized_location === "string") {
     return row.normalized_location;
@@ -557,7 +581,14 @@ function jsonDepartmentAllowed(
   departmentIncludes: string[],
 ): boolean {
   const wanted = departmentIncludes.map((d) => d.toLowerCase());
-  const present = [row.department, row.team, row.Department, row.Team].filter(
+  const present = [
+    row.department,
+    row.team,
+    row.Department,
+    row.Team,
+    // Salesforce static careers index
+    row.Job_Family_Group,
+  ].filter(
     (raw): raw is string => typeof raw === "string" && raw.trim().length > 0,
   );
   if (!present.length) return true;
@@ -570,21 +601,30 @@ function jsonMetadataAllowed(
   metadataIncludes: { name: string; value: string }[],
 ): boolean {
   const meta = row.metadata;
-  if (!Array.isArray(meta)) return false;
-  const entries = meta.filter(
-    (m): m is { name: string; value: unknown } =>
-      !!m &&
-      typeof m === "object" &&
-      typeof (m as { name?: unknown }).name === "string",
-  );
+  if (Array.isArray(meta)) {
+    const entries = meta.filter(
+      (m): m is { name: string; value: unknown } =>
+        !!m &&
+        typeof m === "object" &&
+        typeof (m as { name?: unknown }).name === "string",
+    );
+    return metadataIncludes.every((want) => {
+      const name = want.name.toLowerCase();
+      const value = want.value.toLowerCase();
+      return entries.some(
+        (m) =>
+          m.name.toLowerCase() === name &&
+          typeof m.value === "string" &&
+          m.value.toLowerCase() === value,
+      );
+    });
+  }
+  // Salesforce-style: top-level string fields (e.g. Employee_Type)
   return metadataIncludes.every((want) => {
-    const name = want.name.toLowerCase();
-    const value = want.value.toLowerCase();
-    return entries.some(
-      (m) =>
-        m.name.toLowerCase() === name &&
-        typeof m.value === "string" &&
-        m.value.toLowerCase() === value,
+    const raw = row[want.name];
+    return (
+      typeof raw === "string" &&
+      raw.toLowerCase() === want.value.toLowerCase()
     );
   });
 }

@@ -795,6 +795,39 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
+    id: "salesforce",
+    name: "Salesforce",
+    // Human UI filters New Grads + SWE + US are client-side only; poll static JSON.
+    // Human UI: https://www.salesforce.com/company/careers/jobs/?employeeTypes=New+Grads&country=United+States+of+America&team=Software+Engineering&page=1
+    // Facet still leaks non-new-grad titles (e.g. Systems Engineering Associate); require
+    // new-grad title semantics. Omit bare "Associate" (too broad vs AMTS/College Grad).
+    url: "https://a.sfdcstatic.com/digital/xsf/careers/prod/jobs_1.json",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: salesforce.wd12.myworkdayjobs.com/.../External_Career_Site/job/...
+    jobPathPattern: String.raw`/External_Career_Site/job/`,
+    metadataIncludes: [{ name: "Employee_Type", value: "New Grads" }],
+    departmentIncludes: ["Software Engineering"],
+    locationIncludes: ["United States of America", "United States"],
+    titleIncludes: [
+      "New Grad",
+      "New Graduate",
+      "University",
+      "Campus",
+      "Early Career",
+      "Emerging Talent",
+      "Graduate",
+      "College Grad",
+      "College Graduate",
+      "Entry Level",
+      "Entry-Level",
+      "AMTS",
+      "Engineer I",
+      "Software Engineer I",
+    ],
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams
