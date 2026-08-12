@@ -98,6 +98,7 @@ Configured in [`src/companies.ts`](src/companies.ts).
 - **Intuit** — New College Grad category (TalentBrew); SWE-adjacent titles; exclude `Intern`/`Co-op`
 - **Scale AI** — University dept (Greenhouse; [university careers](https://scale.com/careers/university)); SWE-adjacent titles; exclude `Intern`/`Recruiting`
 - **Block** — SWE + Regular + remote + US hubs (careers API); new-grad title semantics; exclude `Intern`/`Co-op`
+- **Expedia** — Emerging Talent keyword (Appcast); SWE-adjacent titles + US locations; exclude `Intern`
 - **Susquehanna** — New Graduates + June 2027 + Philly/NY (Jibe); SWE-adjacent titles; exclude Master's/PhD/`Intern`
 - **ServiceNow** — Eng + Early Career + US (Jina→Phenom); title must include new-grad semantics; exclude `Intern`
 - **Meta** — newest-first FT search (MPK/NYC/Bellevue); `browser` + `all_jobs` + title must include `University Grad`

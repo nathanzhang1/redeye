@@ -238,6 +238,10 @@ export async function extractJobs(
       if (titleMatchesIncludes(title, company.titleExcludes)) continue;
     }
 
+    // HTML cards often put location in link text and/or URL slug.
+    const locationText = `${title} ${absolute.pathname}`;
+    if (!locationAllowed(locationText, company)) continue;
+
     const canonical = canonicalizeJobUrl(absolute);
     const id = await jobId(company.id, canonical);
     const existing = byUrl.get(canonical);

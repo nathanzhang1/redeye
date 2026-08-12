@@ -819,6 +819,42 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships", "Co-op", "Coop"],
   },
   {
+    id: "expedia",
+    name: "Expedia",
+    // Pre-filtered Emerging Talent keyword (Appcast / careers site).
+    // Human UI: https://careers.expediagroup.com/jobs/?keyword=emerging+talent+and+careers
+    // SWE-adjacent titles + US locations; drop Intern (feed is thin today).
+    url: "https://careers.expediagroup.com/jobs/?keyword=emerging+talent+and+careers",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /job/<slug>/<city-slug>/R-<id>/
+    jobPathPattern: String.raw`/job/[^/]+/[^/]+/R-\d+`,
+    titleIncludes: [
+      "Software",
+      "SWE",
+      "SDE",
+      "Developer",
+      "Machine Learning",
+      "Full Stack",
+      "Frontend",
+      "Backend",
+      "Android",
+      "iOS",
+    ],
+    locationIncludes: [
+      "United States",
+      "USA",
+      "Seattle",
+      "Washington",
+      "Austin",
+      "Chicago",
+      "San Jose",
+      "San Francisco",
+      "New York",
+    ],
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
     id: "sig",
     name: "Susquehanna",
     // Pre-filtered: New Graduates + June 2027 Start + Philly/NY (Jibe).
