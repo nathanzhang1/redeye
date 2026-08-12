@@ -696,6 +696,20 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
+    id: "microsoft",
+    name: "Microsoft",
+    // Pre-filtered Eightfold PCSX: Entry + SWE profession/discipline + IC + FT + US.
+    // Human UI: https://apply.careers.microsoft.com/careers?…&filter_seniority=Entry&filter_profession=software+engineering&…
+    // Titles are not reliable new-grad signals — notify every listing under these filters.
+    url: "https://apply.careers.microsoft.com/api/pcsx/search?domain=microsoft.com&query=&location=United+States%2C+Multiple+Locations%2C+Multiple+Locations&start=0&num=20&sort_by=timestamp&filter_include_remote=0&filter_include_relocation=0&filter_career_discipline=Software+Engineering&filter_employment_type=full-time&filter_roletype=individual+contributor&filter_profession=software+engineering&filter_seniority=Entry",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /careers/job/<pid>
+    jobPathPattern: String.raw`/careers/job/\d+`,
+    jobUrlTemplate: "https://apply.careers.microsoft.com/careers/job/{id}",
+    fetchStartOffsets: [0, 20],
+  },
+  {
     id: "sig",
     name: "Susquehanna",
     // Pre-filtered: New Graduates + June 2027 Start + Philly/NY (Jibe).

@@ -92,6 +92,7 @@ Configured in [`src/companies.ts`](src/companies.ts).
 - **Twitch** — Greenhouse; title must include both `Software Engineer` and `I`; exclude `Intern`
 - **MongoDB** — Early Talent New Grad / PRO·PTO New Grads (Greenhouse) + US + SWE titles; exclude `Intern`
 - **PayPal** — US + Software Engineering (Eightfold PCSX); new-grad/SWE keywords; exclude `Intern`
+- **Microsoft** — Entry + SWE + IC + FT + US (Eightfold PCSX); `all_jobs` under those filters
 - **Susquehanna** — New Graduates + June 2027 + Philly/NY (Jibe); SWE-adjacent titles; exclude Master's/PhD/`Intern`
 - **ServiceNow** — Eng + Early Career + US (Jina→Phenom); title must include new-grad semantics; exclude `Intern`
 - **Meta** — newest-first FT search (MPK/NYC/Bellevue); `browser` + `all_jobs` + title must include `University Grad`
