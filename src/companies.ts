@@ -710,6 +710,26 @@ export const COMPANIES: Company[] = [
     fetchStartOffsets: [0, 20],
   },
   {
+    id: "affirm",
+    name: "Affirm",
+    // Careers #jobOpenings Engineering filter (Greenhouse embed; board affirm).
+    // Human UI: https://www.affirm.com/careers#jobOpenings
+    // Eng dept teams; new-grad signal is level "I" (not II); drop Intern.
+    url: "https://boards-api.greenhouse.io/v1/boards/affirm/departments",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: job-boards.greenhouse.io/affirm/jobs/<id>
+    jobPathPattern: String.raw`/jobs/\d+`,
+    departmentIncludes: [
+      "Consumer Engineering",
+      "Financial Platforms - Engineering",
+      "Infrastructure Platform Eng",
+      "Returnly Engineering",
+    ],
+    titleIncludesAll: ["Engineer", "I"],
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
     id: "sig",
     name: "Susquehanna",
     // Pre-filtered: New Graduates + June 2027 Start + Philly/NY (Jibe).
