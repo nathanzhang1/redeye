@@ -22,50 +22,71 @@ export async function fetchCareerPage(
   url: string,
   postBody?: Record<string, unknown>,
 ): Promise<string> {
-  const response = await fetch(url, {
-    method: postBody ? "POST" : "GET",
-    headers: {
-      "User-Agent": USER_AGENT,
-      Accept: "text/html,application/xhtml+xml,application/json",
-      ...(postBody ? { "Content-Type": "application/json" } : {}),
-    },
-    body: postBody ? JSON.stringify(postBody) : undefined,
-    redirect: "follow",
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
+  const isJinaReader =
+    /(?:^|\.)r\.jina\.ai\//i.test(url) || url.startsWith("https://r.jina.ai/");
+  // Jina free tier 429s easily from Workers IPs — back off harder.
+  const maxAttempts = isJinaReader ? 5 : 1;
+  let lastStatus = 0;
 
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status} fetching ${url}`);
-  }
-
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error(`Empty body from ${url}`);
-  }
-
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > MAX_HTML_BYTES) {
-      void reader.cancel();
-      throw new Error(`HTML from ${url} exceeded ${MAX_HTML_BYTES} bytes`);
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (attempt > 1) {
+      await new Promise((r) => setTimeout(r, 4000 * attempt));
     }
-    chunks.push(value);
+
+    const response = await fetch(url, {
+      method: postBody ? "POST" : "GET",
+      headers: {
+        "User-Agent": USER_AGENT,
+        Accept: isJinaReader
+          ? "text/plain,text/markdown,*/*"
+          : "text/html,application/xhtml+xml,application/json",
+        ...(isJinaReader ? { "X-Return-Format": "markdown" } : {}),
+        ...(postBody ? { "Content-Type": "application/json" } : {}),
+      },
+      body: postBody ? JSON.stringify(postBody) : undefined,
+      redirect: "follow",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    lastStatus = response.status;
+
+    if (response.status === 429 && attempt < maxAttempts) {
+      continue;
+    }
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} fetching ${url}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error(`Empty body from ${url}`);
+    }
+
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_HTML_BYTES) {
+        void reader.cancel();
+        throw new Error(`HTML from ${url} exceeded ${MAX_HTML_BYTES} bytes`);
+      }
+      chunks.push(value);
+    }
+
+    const merged = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+
+    return new TextDecoder("utf-8", { fatal: false, ignoreBOM: true }).decode(
+      merged,
+    );
   }
 
-  const merged = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-
-  return new TextDecoder("utf-8", { fatal: false, ignoreBOM: true }).decode(
-    merged,
-  );
+  throw new Error(`HTTP ${lastStatus} fetching ${url}`);
 }
 
 export async function extractJobs(
@@ -110,6 +131,9 @@ export async function extractJobs(
   const anchors = [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)];
   const byUrl = new Map<string, JobListing>();
 
+  type HtmlJobHit = { href: string; titleHint: string };
+  const hits: HtmlJobHit[] = [];
+
   for (const match of anchors) {
     const attrs = match[1] ?? "";
     const inner = match[2] ?? "";
@@ -129,17 +153,6 @@ export async function extractJobs(
       continue;
     }
 
-    let absolute: URL;
-    try {
-      absolute = new URL(href, base);
-    } catch {
-      continue;
-    }
-
-    if (absolute.protocol !== "http:" && absolute.protocol !== "https:") {
-      continue;
-    }
-
     let title = decodeHtmlEntities(stripTags(inner)).replace(/\s+/g, " ").trim();
     const aria = attrs.match(/\baria-label\s*=\s*(["'])(.*?)\1/i)?.[2];
     if (aria) {
@@ -154,6 +167,27 @@ export async function extractJobs(
         }
       }
     }
+    hits.push({ href, titleHint: title });
+  }
+
+  // Markdown links (e.g. Jina reader proxy): [Title](https://…/jobs/…)
+  for (const match of html.matchAll(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/gi)) {
+    hits.push({ href: match[2], titleHint: match[1].replace(/\s+/g, " ").trim() });
+  }
+
+  for (const hit of hits) {
+    let absolute: URL;
+    try {
+      absolute = new URL(hit.href, base);
+    } catch {
+      continue;
+    }
+
+    if (absolute.protocol !== "http:" && absolute.protocol !== "https:") {
+      continue;
+    }
+
+    let title = hit.titleHint;
     // Phenom (Snowflake GenSWE): empty link text + "Click to apply…" aria — use URL slug.
     if (
       !title ||
@@ -163,6 +197,7 @@ export async function extractJobs(
     ) {
       // Google: /jobs/results/<id>-software-engineer-early-career-campus
       // Phenom: /us/en/job/<id>/Software-Engineer-Backend
+      // ServiceNow: /jobs/<id>/<slug>/
       const slugTitle =
         titleFromGoogleSlug(absolute.pathname) ??
         titleFromJobPathSlug(absolute.pathname);
@@ -816,7 +851,10 @@ function titleFromGoogleSlug(pathname: string): string | null {
 
 /** /us/en/job/<id>/Software-Engineer-Backend -> "Software Engineer Backend" */
 function titleFromJobPathSlug(pathname: string): string | null {
-  const m = pathname.match(/\/job\/[^/]+\/([^/?#]+)/i);
+  const m =
+    pathname.match(/\/job\/[^/]+\/([^/?#]+)/i) ??
+    // ServiceNow Phenom: /jobs/<id>/<slug>/
+    pathname.match(/\/jobs\/\d+\/([^/?#]+)/i);
   if (!m?.[1]) return null;
   const titled = m[1]
     .replace(/[-_]+/g, " ")

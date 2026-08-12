@@ -271,14 +271,17 @@ async function checkCompany(
       }
     }
 
-    // LinkedIn guest search often 429s from datacenter IPs — treat as skip.
-    if (isRateLimit && company.id === "linkedin") {
+    // Datacenter IPs often 429 LinkedIn guest search / Jina reader — treat as skip.
+    if (
+      isRateLimit &&
+      (company.id === "linkedin" || company.url.includes("r.jina.ai/"))
+    ) {
       return {
         companyId: company.id,
         status: "skipped",
         matched: 0,
         notified: 0,
-        error: "LinkedIn rate-limited (429); will retry next cron",
+        error: "Rate-limited (429); will retry next cron",
       };
     }
 

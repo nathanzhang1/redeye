@@ -720,6 +720,32 @@ export const COMPANIES: Company[] = [
     ],
   },
   {
+    id: "servicenow",
+    name: "ServiceNow",
+    // Eng + Early Career + US (Phenom; direct HTML is a JS shell, /widgets 405).
+    // Human UI: https://careers.servicenow.com/jobs/?…&team=Engineering…&jobPostingType=Early+Career&country=United+States
+    // Jina reader returns the filtered result cards as markdown links.
+    // Early Career facet includes non-new-grad titles; require new-grad title semantics.
+    url: "https://r.jina.ai/https://careers.servicenow.com/jobs/?search=&team=Engineering%2C+Infrastructure+and+Operations&jobPostingType=Early+Career&country=United+States&pagesize=20",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /jobs/<id>/<slug>/
+    jobPathPattern: String.raw`/jobs/\d+/`,
+    titleIncludes: [
+      "New Grad",
+      "New Graduate",
+      "University",
+      "Campus",
+      "Early Career",
+      "Emerging Talent",
+      "Graduate",
+      "Entry Level",
+      "Entry-Level",
+      "Associate",
+    ],
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams

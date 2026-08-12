@@ -93,6 +93,7 @@ Configured in [`src/companies.ts`](src/companies.ts).
 - **MongoDB** — Early Talent New Grad / PRO·PTO New Grads (Greenhouse) + US + SWE titles; exclude `Intern`
 - **PayPal** — US + Software Engineering (Eightfold PCSX); new-grad/SWE keywords; exclude `Intern`
 - **Susquehanna** — New Graduates + June 2027 + Philly/NY (Jibe); SWE-adjacent titles; exclude Master's/PhD/`Intern`
+- **ServiceNow** — Eng + Early Career + US (Jina→Phenom); title must include new-grad semantics; exclude `Intern`
 - **Meta** — newest-first FT search (MPK/NYC/Bellevue); `browser` + `all_jobs` + title must include `University Grad`
 - **Apple** — Fresh Graduates (General) + US SWE/ML teams; `html` + `all_jobs` (`/details/<id>/<slug>`)
 - **Google** — Early + US + Bachelor's + Campus query; `html` + `all_jobs` + title must include `Campus`
