@@ -696,6 +696,30 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
+    id: "sig",
+    name: "Susquehanna",
+    // Pre-filtered: New Graduates + June 2027 Start + Philly/NY (Jibe).
+    // Human UI: https://careers.sig.com/jobs?…&tags3=June%202027%20Start&categories=New%20Graduates&city=Bala%20Cynwyd…%7CNew%20York
+    // SWE-adjacent titles; drop Master's / PhD / Intern (quant tracks today).
+    url: "https://careers.sig.com/api/jobs?page=1&tags3=June%202027%20Start&categories=New%20Graduates&sortBy=posted_date&descending=true&city=Bala%20Cynwyd%20(Philadelphia%20Area)%7CNew%20York",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /jobs/<slug>
+    jobPathPattern: String.raw`/jobs/\d+`,
+    jobUrlTemplate: "https://careers.sig.com/jobs/{id}",
+    titleIncludes: ["Engineer", "Software", "SWE", "Developer", "Machine Learning"],
+    titleExcludes: [
+      "Master's",
+      "Masters",
+      "Master",
+      "PhD",
+      "Ph.D",
+      "Intern",
+      "Internship",
+      "Internships",
+    ],
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams
