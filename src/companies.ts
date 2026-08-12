@@ -122,6 +122,7 @@ export const DEFAULT_JOB_PATH_PATTERN = String.raw`/jobs/\d+`;
  */
 export const COMPANIES: Company[] = [
   // HTML/JSON scrapes first so Browser Run quota isn't burned before them.
+  // Late releasers (snap/airbnb/spotify/snowflake/box/docusign) at end.
   {
     id: "amazon",
     name: "Amazon",
@@ -410,35 +411,6 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
-    id: "snap",
-    name: "Snap",
-    // Engineering + Regular + US hubs (Bellevue/Chicago/LA/NY/PA/SF/Santa Monica/Seattle).
-    // Human UI: https://careers.snap.com/jobs?role=Engineering&type=Regular&location=Bellevue&location=Chicago&location=Los+Angeles&location=New+York&location=Palo+Alto&location=San+Francisco&location=Santa+Monica&location=Seattle
-    // Same filters via /api/jobs; new-grad + SWE keywords (no early-career titles today).
-    url: "https://careers.snap.com/api/jobs?role=Engineering&type=Regular&location=Bellevue&location=Chicago&location=Los+Angeles&location=New+York&location=Palo+Alto&location=San+Francisco&location=Santa+Monica&location=Seattle",
-    fetchMode: "html",
-    matchMode: "keywords",
-    // Workday apply: /recruiting/snapchat/snap/job/<loc>/<slug>_<id>
-    jobPathPattern: String.raw`/job/`,
-    titleExcludes: ["Intern", "Internship", "Internships"],
-  },
-  {
-    id: "airbnb",
-    name: "Airbnb",
-    // Engineering + United States (FacetWP page is WordPress; poll Greenhouse depts).
-    // Human UI: https://careers.airbnb.com/positions/?_departments=engineering&_where_you_work=united-states&_jobs_sort=updated_at
-    // New-grad + SWE keywords; drop Intern titles.
-    url: "https://boards-api.greenhouse.io/v1/boards/airbnb/departments",
-    fetchMode: "html",
-    matchMode: "keywords",
-    // Detail: /positions/<id>
-    jobPathPattern: String.raw`/positions/\d+`,
-    departmentIncludes: ["Software Engineering", "Engineering & Technology"],
-    // Board uses "United States", "Remote - USA", "Remote - US", "San Francisco, CA", …
-    locationIncludes: ["United States", "USA", "Remote - US", ", CA"],
-    titleExcludes: ["Intern", "Internship", "Internships"],
-  },
-  {
     id: "doordash",
     name: "DoorDash",
     // Engineering + intern/early-career toggle (intern=1). Site is CF-blocked; Greenhouse.
@@ -454,32 +426,6 @@ export const COMPANIES: Company[] = [
     ],
     titleIncludes: ["Entry-Level"],
     titleExcludes: ["Intern", "Internship", "Internships"],
-  },
-  {
-    id: "spotify",
-    name: "Spotify",
-    // Eng categories + US hubs + Early Career Program (currently empty).
-    // Human UI: https://www.lifeatspotify.com/jobs?c=backend&c=client-c&c=data&c=developer-tools-infrastructure&c=engineering-leadership&c=machine-learning&c=mobile&c=network-engineering-it&c=security&c=tech-research&c=web&l=united-states-of-america-home-mix&l=new-york&l=boston&l=los-angeles&l=washington-d-c&j=early-career-program
-    // API mirrors URL filters; all early-career hits except Intern titles.
-    url: "https://api.lifeatspotify.com/wp-json/animal/v1/job/search?c=backend%2Cclient-c%2Cdata%2Cdeveloper-tools-infrastructure%2Cengineering-leadership%2Cmachine-learning%2Cmobile%2Cnetwork-engineering-it%2Csecurity%2Ctech-research%2Cweb&l=united-states-of-america-home-mix%2Cnew-york%2Cboston%2Clos-angeles%2Cwashington-d-c&j=early-career-program",
-    fetchMode: "html",
-    matchMode: "all_jobs",
-    // Detail: /jobs/<slug>
-    jobPathPattern: String.raw`/jobs/[a-z0-9-]+`,
-    jobUrlTemplate: "https://www.lifeatspotify.com/jobs/{id}",
-    titleExcludes: ["Intern", "Internship", "Internships"],
-  },
-  {
-    id: "snowflake",
-    name: "Snowflake",
-    // GenSWE early-career landing (roles embedded as Phenom job cards).
-    // Human UI: https://careers.snowflake.com/us/en/generalsoftwareengineeringprogram
-    // Any /us/en/job/ card on this page (currently Software Engineer - Backend).
-    url: "https://careers.snowflake.com/us/en/generalsoftwareengineeringprogram",
-    fetchMode: "html",
-    matchMode: "all_jobs",
-    // Detail: /us/en/job/<id>/<slug>
-    jobPathPattern: String.raw`/us/en/job/[^/]+/[^/]+`,
   },
   {
     id: "github",
@@ -514,21 +460,6 @@ export const COMPANIES: Company[] = [
       "Returnship",
       "University",
     ],
-    titleIncludes: ["Engineer"],
-    titleExcludes: ["Intern", "Internship", "Internships"],
-  },
-  {
-    id: "docusign",
-    name: "DocuSign",
-    // UI "University & New Grad"; Jibe API category term is "University" (empty of SWE today).
-    // Human UI: https://careers.docusign.com/careers-home/jobs?categories=University%20%26%20New%20Grad&sortBy=posted_date&descending=true&page=1
-    // SWE via title Engineer; drop Intern.
-    url: "https://careers.docusign.com/api/jobs?page=1&categories=University&sortBy=posted_date&descending=true",
-    fetchMode: "html",
-    matchMode: "all_jobs",
-    // Detail: /careers-home/jobs/<slug>
-    jobPathPattern: String.raw`/careers-home/jobs/\d+`,
-    jobUrlTemplate: "https://careers.docusign.com/careers-home/jobs/{id}",
     titleIncludes: ["Engineer"],
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
@@ -575,47 +506,6 @@ export const COMPANIES: Company[] = [
       "Core Product & Platform | API",
     ],
     locationIncludes: ["San Francisco"],
-    titleExcludes: ["Intern", "Internship", "Internships"],
-  },
-  {
-    id: "box",
-    name: "Box",
-    // Engineering + North America (careers.box.com is CF-blocked; Greenhouse).
-    // Human UI: https://careers.box.com/en/jobs/?search=&region=North+America&team=Engineering&pagesize=20#results
-    // Eng dept tree + NA locations; new-grad + SWE keywords; drop Intern.
-    url: "https://boards-api.greenhouse.io/v1/boards/boxinc/departments",
-    fetchMode: "html",
-    matchMode: "keywords",
-    // Detail: job-boards.greenhouse.io/boxinc/jobs/<id>
-    jobPathPattern: String.raw`/jobs/\d+`,
-    departmentIncludes: [
-      "Engineering",
-      "Experiences",
-      "Core Platform",
-      "Cloud Engineering - R&D",
-      "EBOS/TPM",
-      "Engineering Admin",
-      "Engineering Operations - COGs",
-      "Enterprise",
-      "Workflows",
-    ],
-    locationIncludes: [
-      "United States",
-      "Canada",
-      "Redwood City",
-      "San Francisco",
-      "New York",
-      "Chicago",
-      "Austin",
-      "Boston",
-      ", CA",
-      ", NY",
-      ", TX",
-      ", IL",
-      ", MA",
-      ", CO",
-      ", WA",
-    ],
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
@@ -949,5 +839,116 @@ export const COMPANIES: Company[] = [
     // Eightfold: /careers/job/<pid>
     jobPathPattern: String.raw`/careers/job/\d+`,
     titleIncludes: ["New College Grad 2027"],
+  },
+  {
+    id: "snap",
+    name: "Snap",
+    // Engineering + Regular + US hubs (Bellevue/Chicago/LA/NY/PA/SF/Santa Monica/Seattle).
+    // Human UI: https://careers.snap.com/jobs?role=Engineering&type=Regular&location=Bellevue&location=Chicago&location=Los+Angeles&location=New+York&location=Palo+Alto&location=San+Francisco&location=Santa+Monica&location=Seattle
+    // Same filters via /api/jobs; new-grad + SWE keywords (no early-career titles today).
+    url: "https://careers.snap.com/api/jobs?role=Engineering&type=Regular&location=Bellevue&location=Chicago&location=Los+Angeles&location=New+York&location=Palo+Alto&location=San+Francisco&location=Santa+Monica&location=Seattle",
+    fetchMode: "html",
+    matchMode: "keywords",
+    // Workday apply: /recruiting/snapchat/snap/job/<loc>/<slug>_<id>
+    jobPathPattern: String.raw`/job/`,
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
+    id: "airbnb",
+    name: "Airbnb",
+    // Engineering + United States (FacetWP page is WordPress; poll Greenhouse depts).
+    // Human UI: https://careers.airbnb.com/positions/?_departments=engineering&_where_you_work=united-states&_jobs_sort=updated_at
+    // New-grad + SWE keywords; drop Intern titles.
+    url: "https://boards-api.greenhouse.io/v1/boards/airbnb/departments",
+    fetchMode: "html",
+    matchMode: "keywords",
+    // Detail: /positions/<id>
+    jobPathPattern: String.raw`/positions/\d+`,
+    departmentIncludes: ["Software Engineering", "Engineering & Technology"],
+    // Board uses "United States", "Remote - USA", "Remote - US", "San Francisco, CA", …
+    locationIncludes: ["United States", "USA", "Remote - US", ", CA"],
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
+    id: "spotify",
+    name: "Spotify",
+    // Eng categories + US hubs + Early Career Program (currently empty).
+    // Human UI: https://www.lifeatspotify.com/jobs?c=backend&c=client-c&c=data&c=developer-tools-infrastructure&c=engineering-leadership&c=machine-learning&c=mobile&c=network-engineering-it&c=security&c=tech-research&c=web&l=united-states-of-america-home-mix&l=new-york&l=boston&l=los-angeles&l=washington-d-c&j=early-career-program
+    // API mirrors URL filters; all early-career hits except Intern titles.
+    url: "https://api.lifeatspotify.com/wp-json/animal/v1/job/search?c=backend%2Cclient-c%2Cdata%2Cdeveloper-tools-infrastructure%2Cengineering-leadership%2Cmachine-learning%2Cmobile%2Cnetwork-engineering-it%2Csecurity%2Ctech-research%2Cweb&l=united-states-of-america-home-mix%2Cnew-york%2Cboston%2Clos-angeles%2Cwashington-d-c&j=early-career-program",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /jobs/<slug>
+    jobPathPattern: String.raw`/jobs/[a-z0-9-]+`,
+    jobUrlTemplate: "https://www.lifeatspotify.com/jobs/{id}",
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
+    id: "snowflake",
+    name: "Snowflake",
+    // GenSWE early-career landing (roles embedded as Phenom job cards).
+    // Human UI: https://careers.snowflake.com/us/en/generalsoftwareengineeringprogram
+    // Any /us/en/job/ card on this page (currently Software Engineer - Backend).
+    url: "https://careers.snowflake.com/us/en/generalsoftwareengineeringprogram",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /us/en/job/<id>/<slug>
+    jobPathPattern: String.raw`/us/en/job/[^/]+/[^/]+`,
+  },
+  {
+    id: "box",
+    name: "Box",
+    // Engineering + North America (careers.box.com is CF-blocked; Greenhouse).
+    // Human UI: https://careers.box.com/en/jobs/?search=&region=North+America&team=Engineering&pagesize=20#results
+    // Eng dept tree + NA locations; new-grad + SWE keywords; drop Intern.
+    url: "https://boards-api.greenhouse.io/v1/boards/boxinc/departments",
+    fetchMode: "html",
+    matchMode: "keywords",
+    // Detail: job-boards.greenhouse.io/boxinc/jobs/<id>
+    jobPathPattern: String.raw`/jobs/\d+`,
+    departmentIncludes: [
+      "Engineering",
+      "Experiences",
+      "Core Platform",
+      "Cloud Engineering - R&D",
+      "EBOS/TPM",
+      "Engineering Admin",
+      "Engineering Operations - COGs",
+      "Enterprise",
+      "Workflows",
+    ],
+    locationIncludes: [
+      "United States",
+      "Canada",
+      "Redwood City",
+      "San Francisco",
+      "New York",
+      "Chicago",
+      "Austin",
+      "Boston",
+      ", CA",
+      ", NY",
+      ", TX",
+      ", IL",
+      ", MA",
+      ", CO",
+      ", WA",
+    ],
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
+    id: "docusign",
+    name: "DocuSign",
+    // UI "University & New Grad"; Jibe API category term is "University" (empty of SWE today).
+    // Human UI: https://careers.docusign.com/careers-home/jobs?categories=University%20%26%20New%20Grad&sortBy=posted_date&descending=true&page=1
+    // SWE via title Engineer; drop Intern.
+    url: "https://careers.docusign.com/api/jobs?page=1&categories=University&sortBy=posted_date&descending=true",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /careers-home/jobs/<slug>
+    jobPathPattern: String.raw`/careers-home/jobs/\d+`,
+    jobUrlTemplate: "https://careers.docusign.com/careers-home/jobs/{id}",
+    titleIncludes: ["Engineer"],
+    titleExcludes: ["Intern", "Internship", "Internships"],
   },
 ];
