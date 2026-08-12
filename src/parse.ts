@@ -388,6 +388,8 @@ function jsonJobRows(data: unknown, company: Company): unknown[] | null {
   if (!data || typeof data !== "object") return null;
   const obj = data as Record<string, unknown>;
   if (Array.isArray(obj.jobs)) return unwrapJsonJobHits(obj.jobs);
+  // Block careers: { currentPage: [...], total }
+  if (Array.isArray(obj.currentPage)) return unwrapJsonJobHits(obj.currentPage);
   // Eightfold PCS: { positions: [...], count: N }
   if (Array.isArray(obj.positions)) return unwrapJsonJobHits(obj.positions);
   // Snap careers: { body: [{ _source: { title, absolute_url, … } }] }

@@ -791,6 +791,34 @@ export const COMPANIES: Company[] = [
     ],
   },
   {
+    id: "block",
+    name: "Block",
+    // Pre-filtered: Software Engineering + Regular + remote-eligible + US hubs.
+    // Human UI: https://block.xyz/careers/jobs?…&teams[]=Software%20Engineering&locations[]=…
+    // New-grad title semantics on that feed; drop Intern/Co-op (empty today).
+    url: "https://block.xyz/api/careers/jobs?employeeTypes[]=Regular&isRemote=true&locations[]=Seattle%2C%20WA%2C%20US&locations[]=San%20Jose%2C%20CA%2C%20US&locations[]=San%20Francisco%2C%20CA%2C%20US&locations[]=San%20Diego%2C%20CA%2C%20US&locations[]=Orange%20County%2C%20CA%2C%20US&locations[]=New%20York%2C%20NY%2C%20US&locations[]=Los%20Angeles%2C%20CA%2C%20US&locations[]=Chicago%2C%20IL%2C%20US&locations[]=Bay%20Area%2C%20CA%2C%20US&teams[]=Software%20Engineering",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /careers/jobs/<id>
+    jobPathPattern: String.raw`/careers/jobs/\d+`,
+    jobUrlTemplate: "https://block.xyz/careers/jobs/{id}",
+    titleIncludes: [
+      "New Grad",
+      "New Graduate",
+      "University",
+      "Campus",
+      "Early Career",
+      "Emerging Talent",
+      "Graduate",
+      "Entry Level",
+      "Entry-Level",
+      "Associate",
+      "Engineer I",
+      "Software Engineer I",
+    ],
+    titleExcludes: ["Intern", "Internship", "Internships", "Co-op", "Coop"],
+  },
+  {
     id: "sig",
     name: "Susquehanna",
     // Pre-filtered: New Graduates + June 2027 Start + Philly/NY (Jibe).
