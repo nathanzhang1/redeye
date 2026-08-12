@@ -573,6 +573,47 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
+    id: "box",
+    name: "Box",
+    // Engineering + North America (careers.box.com is CF-blocked; Greenhouse).
+    // Human UI: https://careers.box.com/en/jobs/?search=&region=North+America&team=Engineering&pagesize=20#results
+    // Eng dept tree + NA locations; new-grad + SWE keywords; drop Intern.
+    url: "https://boards-api.greenhouse.io/v1/boards/boxinc/departments",
+    fetchMode: "html",
+    matchMode: "keywords",
+    // Detail: job-boards.greenhouse.io/boxinc/jobs/<id>
+    jobPathPattern: String.raw`/jobs/\d+`,
+    departmentIncludes: [
+      "Engineering",
+      "Experiences",
+      "Core Platform",
+      "Cloud Engineering - R&D",
+      "EBOS/TPM",
+      "Engineering Admin",
+      "Engineering Operations - COGs",
+      "Enterprise",
+      "Workflows",
+    ],
+    locationIncludes: [
+      "United States",
+      "Canada",
+      "Redwood City",
+      "San Francisco",
+      "New York",
+      "Chicago",
+      "Austin",
+      "Boston",
+      ", CA",
+      ", NY",
+      ", TX",
+      ", IL",
+      ", MA",
+      ", CO",
+      ", WA",
+    ],
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams
