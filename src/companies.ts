@@ -745,6 +745,21 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
+    id: "intuit",
+    name: "Intuit",
+    // New College Grad category (TalentBrew). Keyword search
+    // /search-jobs/interns%20new%20college%20grads/ is noisy (~383 mixed roles).
+    // Human UI: https://jobs.intuit.com/category/new-college-grad-jobs/27595/9205760/1
+    // SWE-adjacent titles; drop Intern/Co-op.
+    url: "https://jobs.intuit.com/category/new-college-grad-jobs/27595/9205760/1",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /job/<city>/<slug>/<org>/<id>
+    jobPathPattern: String.raw`/job/[^/]+/[^/]+/\d+/\d+`,
+    titleIncludes: ["Software", "SWE", "Developer", "Machine Learning"],
+    titleExcludes: ["Intern", "Internship", "Internships", "Co-op", "Coop"],
+  },
+  {
     id: "sig",
     name: "Susquehanna",
     // Pre-filtered: New Graduates + June 2027 Start + Philly/NY (Jibe).
