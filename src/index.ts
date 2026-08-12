@@ -1,5 +1,5 @@
 import { fetchRenderedHtml } from "./browser";
-import { checkAll } from "./check";
+import { checkAll, checkOne } from "./check";
 import { COMPANIES } from "./companies";
 import { setCompanyPaused, setGlobalPaused } from "./control";
 import { notifyNewJobs } from "./discord";
@@ -36,12 +36,18 @@ export default {
         (request.headers.get("Accept") ?? "").includes("text/html");
       if (wantsHtml) {
         const token = statusPageToken(request, url) ?? env.RUN_SECRET;
-        return new Response(renderStatusHtml(status, { token }), {
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-            "Cache-Control": "no-store",
+        return new Response(
+          renderStatusHtml(status, {
+            token,
+            flash: parseRunFlash(url),
+          }),
+          {
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
+              "Cache-Control": "no-store",
+            },
           },
-        });
+        );
       }
       return Response.json(status, {
         headers: { "Cache-Control": "no-store" },
@@ -178,7 +184,57 @@ export default {
       if (!authorize(request, env.RUN_SECRET, url)) {
         return new Response("Unauthorized", { status: 401 });
       }
-      const summary = await checkAll(env);
+
+      let companyId: string | undefined;
+      try {
+        companyId = await readRunCompanyId(request, url);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return Response.json({ error: message }, { status: 400 });
+      }
+      const summary = companyId
+        ? await checkOne(env, companyId)
+        : await checkAll(env);
+
+      const wantsHtml =
+        (request.headers.get("Accept") ?? "").includes("text/html") ||
+        (request.headers.get("Content-Type") ?? "").includes(
+          "application/x-www-form-urlencoded",
+        );
+      if (wantsHtml) {
+        const token = statusPageToken(request, url) ?? env.RUN_SECRET;
+        const detail = summary.details[0];
+        const runStatus = companyId
+          ? (detail?.status ?? "ok")
+          : summary.failures > 0
+            ? "failed"
+            : summary.skipped === summary.companies
+              ? "skipped"
+              : "ok";
+        const flash = new URLSearchParams({
+          format: "html",
+          token,
+          ran: companyId ? "company" : "all",
+          runStatus,
+          matched: String(
+            companyId
+              ? (detail?.matched ?? 0)
+              : summary.details.reduce((n, d) => n + d.matched, 0),
+          ),
+          notified: String(summary.newJobs),
+          failures: String(summary.failures),
+          skipped: String(summary.skipped),
+        });
+        if (companyId) flash.set("companyId", companyId);
+        if (companyId && detail?.error) {
+          flash.set("error", detail.error.slice(0, 200));
+        }
+        return Response.redirect(
+          new URL(`/status?${flash.toString()}`, url).toString(),
+          303,
+        );
+      }
+
       return Response.json(summary);
     }
 
@@ -242,6 +298,82 @@ function statusPageToken(request: Request, url: URL): string | null {
   const header = request.headers.get("Authorization");
   if (header?.startsWith("Bearer ")) return header.slice("Bearer ".length);
   return null;
+}
+
+async function readRunCompanyId(
+  request: Request,
+  url: URL,
+): Promise<string | undefined> {
+  const fromQuery = url.searchParams.get("companyId")?.trim();
+  if (fromQuery) {
+    if (!COMPANIES.some((c) => c.id === fromQuery)) {
+      throw new Error(`Unknown companyId: ${fromQuery}`);
+    }
+    return fromQuery;
+  }
+
+  const contentType = request.headers.get("Content-Type") ?? "";
+  if (contentType.includes("application/json")) {
+    try {
+      const data = (await request.json()) as { companyId?: unknown };
+      if (typeof data.companyId === "string" && data.companyId.trim()) {
+        const id = data.companyId.trim();
+        if (!COMPANIES.some((c) => c.id === id)) {
+          throw new Error(`Unknown companyId: ${id}`);
+        }
+        return id;
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("Unknown")) {
+        throw error;
+      }
+      // empty / invalid JSON body → run all
+    }
+    return undefined;
+  }
+
+  if (
+    contentType.includes("application/x-www-form-urlencoded") ||
+    contentType.includes("multipart/form-data")
+  ) {
+    const form = await request.formData();
+    const id = String(form.get("companyId") ?? "").trim();
+    if (!id) return undefined;
+    if (!COMPANIES.some((c) => c.id === id)) {
+      throw new Error(`Unknown companyId: ${id}`);
+    }
+    return id;
+  }
+
+  return undefined;
+}
+
+function parseRunFlash(
+  url: URL,
+):
+  | {
+      ran: "all" | "company";
+      companyId?: string;
+      runStatus: string;
+      matched: number;
+      notified: number;
+      failures: number;
+      skipped: number;
+      error?: string;
+    }
+  | undefined {
+  const ran = url.searchParams.get("ran");
+  if (ran !== "all" && ran !== "company") return undefined;
+  return {
+    ran,
+    companyId: url.searchParams.get("companyId") ?? undefined,
+    runStatus: url.searchParams.get("runStatus") ?? "ok",
+    matched: Number(url.searchParams.get("matched") ?? "0") || 0,
+    notified: Number(url.searchParams.get("notified") ?? "0") || 0,
+    failures: Number(url.searchParams.get("failures") ?? "0") || 0,
+    skipped: Number(url.searchParams.get("skipped") ?? "0") || 0,
+    error: url.searchParams.get("error") ?? undefined,
+  };
 }
 
 type PauseBody = {

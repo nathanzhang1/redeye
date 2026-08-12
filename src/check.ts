@@ -152,6 +152,41 @@ export async function checkAll(env: Env): Promise<CheckSummary> {
   return summary;
 }
 
+/**
+ * Manual single-company poll (dashboard / API). Bypasses per-company pause and
+ * browser quota scheduling so you can debug one board without a full cron pass.
+ * Still runs the normal scrape → seed/notify path.
+ */
+export async function checkOne(
+  env: Env,
+  companyId: string,
+): Promise<CheckSummary> {
+  const company = COMPANIES.find((c) => c.id === companyId);
+  if (!company) {
+    throw new Error(`Unknown companyId: ${companyId}`);
+  }
+
+  const detail = await checkCompany(env, company);
+  await saveRunStatus(env.SEEN_JOBS, company, detail);
+
+  const summary: CheckSummary = {
+    companies: 1,
+    newJobs: detail.notified,
+    seeded: detail.status === "seeded" ? 1 : 0,
+    failures: detail.status === "failed" ? 1 : 0,
+    skipped: detail.status === "skipped" ? 1 : 0,
+    details: [detail],
+  };
+  console.log(
+    JSON.stringify({
+      event: "check_one_complete",
+      companyId,
+      ...summary,
+    }),
+  );
+  return summary;
+}
+
 async function planBrowserCompanies(
   kv: KVNamespace,
   pausedCompanies: Set<string> = new Set(),

@@ -139,12 +139,24 @@ export async function getTrackerStatus(kv: KVNamespace): Promise<TrackerStatus> 
   };
 }
 
+export type StatusFlash = {
+  ran: "all" | "company";
+  companyId?: string;
+  runStatus: string;
+  matched: number;
+  notified: number;
+  failures: number;
+  skipped: number;
+  error?: string;
+};
+
 export function renderStatusHtml(
   status: TrackerStatus,
-  options: { token: string },
+  options: { token: string; flash?: StatusFlash },
 ): string {
   const token = options.token;
   const pauseAction = `/control/pause?token=${encodeURIComponent(token)}`;
+  const runAction = `/run?token=${encodeURIComponent(token)}`;
   const statusHref = `/status?token=${encodeURIComponent(token)}&format=html`;
 
   const counts = summarizeCompanies(status.companies);
@@ -156,7 +168,7 @@ export function renderStatusHtml(
         ? escapeHtml(formatPacificTime(c.checkedAt))
         : "<em>never</em>";
       const err = c.error
-        ? `<div class="err">${escapeHtml(c.error)}</div>`
+        ? `<div class="err" title="${escapeAttr(c.error)}">${escapeHtml(c.error)}</div>`
         : "";
       const pauseBadge = c.paused
         ? `<span class="badge paused">paused</span> `
@@ -176,6 +188,13 @@ export function renderStatusHtml(
             label: "Pause",
             className: "btn pause",
           });
+      const runBtn = runForm(runAction, {
+        companyId: c.companyId,
+        label: "Run",
+        className: "btn run",
+        title:
+          "Poll this company now (bypasses pause + browser quota; may notify Discord)",
+      });
       const attention = needsAttention(c) ? "1" : "0";
       const healthy = isHealthy(c) ? "1" : "0";
       return `<tr class="${c.paused ? "row-paused" : ""}"
@@ -188,14 +207,14 @@ export function renderStatusHtml(
         data-rank="${statusSortRank(c)}"
         data-checked="${escapeAttr(c.checkedAt ?? "")}"
         data-matched="${c.matched}">
-        <td><strong>${escapeHtml(c.name)}</strong><br><code>${escapeHtml(c.companyId)}</code></td>
-        <td>${pauseBadge}<span class="badge ${c.status}">${c.status}</span></td>
-        <td>${checked}</td>
-        <td>${c.matched}</td>
-        <td>${c.notified}</td>
-        <td>${c.bootstrapped ? "yes" : "no"}</td>
-        <td>${escapeHtml(c.fetchMode)} / ${escapeHtml(c.matchMode)}${err}<br><a href="${escapeAttr(c.url)}" target="_blank" rel="noopener">open page</a></td>
-        <td>${pauseBtn}</td>
+        <td class="col-company"><strong>${escapeHtml(c.name)}</strong><br><code>${escapeHtml(c.companyId)}</code></td>
+        <td class="col-status">${pauseBadge}<span class="badge ${c.status}">${c.status}</span></td>
+        <td class="col-checked">${checked}</td>
+        <td class="col-num">${c.matched}</td>
+        <td class="col-num">${c.notified}</td>
+        <td class="col-num">${c.bootstrapped ? "yes" : "no"}</td>
+        <td class="col-config"><span class="mode">${escapeHtml(c.fetchMode)} / ${escapeHtml(c.matchMode)}</span>${err}<br><a href="${escapeAttr(c.url)}" target="_blank" rel="noopener">open page</a></td>
+        <td class="col-control actions">${runBtn}${pauseBtn}</td>
       </tr>`;
     })
     .join("\n");
@@ -213,6 +232,15 @@ export function renderStatusHtml(
         label: "Pause all polling",
         className: "btn pause global",
       });
+
+  const runAllBtn = runForm(runAction, {
+    label: "Run all",
+    className: "btn run global",
+    title:
+      "Poll every company now (same as cron / POST /run; respects pauses; may take a while)",
+  });
+
+  const flashBanner = renderFlashBanner(options.flash, status);
 
   const attentionList = sorted
     .filter(needsAttention)
@@ -257,27 +285,45 @@ export function renderStatusHtml(
     .shown { font-size: .8rem; color: #6b7280; margin-left: auto; }
     .banner { padding: .65rem .8rem; border-radius: .5rem; margin-bottom: 1rem; font-size: .9rem; }
     .banner.paused { background: color-mix(in srgb, var(--paused) 18%, transparent); border: 1px solid color-mix(in srgb, var(--paused) 45%, transparent); }
-    table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-    th, td { text-align: left; padding: .55rem .4rem; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
-    th { font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
-    .badge { display: inline-block; padding: .1rem .45rem; border-radius: 999px; font-size: .75rem; font-weight: 600; color: #fff; }
+    .banner.run-ok { background: color-mix(in srgb, var(--ok) 12%, transparent); border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent); }
+    .banner.run-fail { background: color-mix(in srgb, var(--fail) 12%, transparent); border: 1px solid color-mix(in srgb, var(--fail) 40%, transparent); }
+    .banner.run-skip { background: color-mix(in srgb, var(--skip) 12%, transparent); border: 1px solid color-mix(in srgb, var(--skip) 40%, transparent); }
+    .actions { display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; gap: .3rem; height: 100%; box-sizing: border-box; }
+    .table-wrap { width: 100%; overflow-x: auto; }
+    /* height:1px lets row cells share full row height so Control can stretch with Config */
+    table { width: 100%; height: 1px; border-collapse: collapse; table-layout: fixed; font-size: .9rem; }
+    col.col-company { width: 12%; }
+    col.col-status { width: 9%; }
+    col.col-checked { width: 15%; }
+    col.col-num { width: 6%; }
+    col.col-config { width: 34%; }
+    col.col-control { width: 12%; }
+    th, td { text-align: left; padding: .55rem .45rem; border-bottom: 1px solid #e5e7eb; vertical-align: top; overflow: hidden; height: 100%; }
+    th { font-size: .7rem; text-transform: uppercase; letter-spacing: .03em; color: #6b7280; line-height: 1.25; overflow-wrap: anywhere; height: auto; }
+    td.col-checked { font-size: .8rem; overflow-wrap: anywhere; }
+    td.col-config { overflow-wrap: anywhere; word-break: break-word; }
+    td.col-control { overflow: hidden; vertical-align: top; }
+    .badge { display: inline-block; padding: .1rem .45rem; border-radius: 999px; font-size: .75rem; font-weight: 600; color: #fff; max-width: 100%; }
     .badge.ok { background: var(--ok); }
     .badge.failed { background: var(--fail); }
     .badge.seeded { background: var(--seed); }
     .badge.skipped { background: var(--skip); }
     .badge.never { background: var(--never); }
     .badge.paused { background: var(--paused); }
-    .err { margin-top: .35rem; color: var(--fail); font-size: .8rem; word-break: break-word; }
+    .err { margin-top: .35rem; color: var(--fail); font-size: .78rem; overflow-wrap: anywhere; word-break: break-word; max-height: 4.5em; overflow: auto; }
+    .col-config .mode { display: block; overflow-wrap: anywhere; }
     .badge.skipped + .err, td:has(.badge.skipped) .err { color: var(--skip); }
-    code { font-size: .8rem; }
+    code { font-size: .8rem; overflow-wrap: anywhere; }
     a { color: inherit; }
-    .btn { appearance: none; border: 1px solid #d1d5db; background: #f9fafb; color: inherit; border-radius: .4rem; padding: .3rem .55rem; font-size: .8rem; font-weight: 600; cursor: pointer; }
+    .btn { appearance: none; border: 1px solid #d1d5db; background: #f9fafb; color: inherit; border-radius: .4rem; padding: .3rem .55rem; font-size: .8rem; font-weight: 600; cursor: pointer; white-space: nowrap; box-sizing: border-box; }
+    td.col-control .btn { width: 100%; }
     .btn.pause { border-color: color-mix(in srgb, var(--paused) 50%, #d1d5db); }
     .btn.resume { border-color: color-mix(in srgb, var(--ok) 50%, #d1d5db); }
+    .btn.run { border-color: color-mix(in srgb, var(--seed) 55%, #d1d5db); }
     .btn.global { padding: .45rem .75rem; }
     tr.row-paused { opacity: .72; }
     tr.is-hidden { display: none; }
-    form.inline { display: inline; margin: 0; }
+    form.inline { display: inline-flex; margin: 0; }
     @media (prefers-color-scheme: dark) {
       .chip { background: #1f2937; border-color: #374151; }
       .chip.active { background: #f3f4f6; color: #111827; border-color: #f3f4f6; }
@@ -298,9 +344,10 @@ export function renderStatusHtml(
   </div>
   ${
     status.globalPaused
-      ? `<div class="banner paused"><strong>Global pause is on</strong> — cron and <code>/run</code> skip all companies. Last-check rows are preserved.</div>`
+      ? `<div class="banner paused"><strong>Global pause is on</strong> — cron and <strong>Run all</strong> skip all companies. Per-company <strong>Run</strong> still polls that board. Last-check rows are preserved.</div>`
       : ""
   }
+  ${flashBanner}
   <div class="summary" id="summary-chips" role="group" aria-label="Status filters">
     <button type="button" class="chip active" data-filter="all">All <span class="n">${counts.total}</span></button>
     <button type="button" class="chip attention" data-filter="attention">Needs attention <span class="n">${counts.attention}</span></button>
@@ -323,6 +370,7 @@ export function renderStatusHtml(
   </div>`
   }
   <div class="controls">
+    ${runAllBtn}
     ${globalBtn}
     <a class="btn" href="${escapeAttr(statusHref)}">Refresh</a>
   </div>
@@ -338,15 +386,26 @@ export function renderStatusHtml(
     </select>
     <span class="shown" id="shown-count"></span>
   </div>
+  <div class="table-wrap">
   <table>
+    <colgroup>
+      <col class="col-company" />
+      <col class="col-status" />
+      <col class="col-checked" />
+      <col class="col-num" />
+      <col class="col-num" />
+      <col class="col-num" />
+      <col class="col-config" />
+      <col class="col-control" />
+    </colgroup>
     <thead>
       <tr>
         <th>Company</th>
         <th>Status</th>
         <th>Last check</th>
-        <th>Matched</th>
-        <th>Notified</th>
-        <th>Bootstrapped</th>
+        <th title="Matched">Match</th>
+        <th title="Notified">Notify</th>
+        <th title="Bootstrapped">Boot</th>
         <th>Config</th>
         <th>Control</th>
       </tr>
@@ -355,6 +414,7 @@ export function renderStatusHtml(
       ${rows || `<tr><td colspan="8">No companies configured</td></tr>`}
     </tbody>
   </table>
+  </div>
   <script>
     (function () {
       const tbody = document.getElementById("company-rows");
@@ -519,6 +579,59 @@ function truncate(value: string, max: number): string {
   return `${value.slice(0, max - 1)}…`;
 }
 
+function renderFlashBanner(
+  flash: StatusFlash | undefined,
+  status: TrackerStatus,
+): string {
+  if (!flash) return "";
+  const companyName = flash.companyId
+    ? (status.companies.find((c) => c.companyId === flash.companyId)?.name ??
+      flash.companyId)
+    : undefined;
+  const tone =
+    flash.runStatus === "failed" || flash.failures > 0
+      ? "run-fail"
+      : flash.runStatus === "skipped"
+        ? "run-skip"
+        : "run-ok";
+  const who =
+    flash.ran === "company"
+      ? `<strong>${escapeHtml(companyName ?? "company")}</strong>`
+      : "<strong>All companies</strong>";
+  const err = flash.error
+    ? `<br /><span class="attn-err">${escapeHtml(flash.error)}</span>`
+    : "";
+  return `<div class="banner ${tone}">
+    Run finished — ${who}
+    · status <span class="badge ${escapeAttr(flash.runStatus)}">${escapeHtml(flash.runStatus)}</span>
+    · matched ${flash.matched}
+    · notified ${flash.notified}
+    ${flash.ran === "all" ? `· failures ${flash.failures} · skipped ${flash.skipped}` : ""}
+    ${err}
+  </div>`;
+}
+
+function runForm(
+  action: string,
+  opts: {
+    companyId?: string;
+    label: string;
+    className: string;
+    title?: string;
+  },
+): string {
+  const companyField = opts.companyId
+    ? `<input type="hidden" name="companyId" value="${escapeAttr(opts.companyId)}" />`
+    : "";
+  const title = opts.title
+    ? ` title="${escapeAttr(opts.title)}"`
+    : "";
+  return `<form class="inline" method="post" action="${escapeAttr(action)}">
+    ${companyField}
+    <button class="${escapeAttr(opts.className)}" type="submit"${title}>${escapeHtml(opts.label)}</button>
+  </form>`;
+}
+
 function pauseForm(
   action: string,
   opts: {
@@ -547,12 +660,10 @@ function formatPacificTime(iso: string): string {
   if (Number.isNaN(date.getTime())) return iso;
   return new Intl.DateTimeFormat("en-US", {
     timeZone: "America/Los_Angeles",
-    year: "numeric",
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-    second: "2-digit",
     hour12: true,
     timeZoneName: "short",
   }).format(date);
