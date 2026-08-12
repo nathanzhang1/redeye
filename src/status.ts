@@ -147,7 +147,10 @@ export function renderStatusHtml(
   const pauseAction = `/control/pause?token=${encodeURIComponent(token)}`;
   const statusHref = `/status?token=${encodeURIComponent(token)}&format=html`;
 
-  const rows = status.companies
+  const counts = summarizeCompanies(status.companies);
+  const sorted = [...status.companies].sort(compareCompaniesForStatus);
+
+  const rows = sorted
     .map((c) => {
       const checked = c.checkedAt
         ? escapeHtml(formatPacificTime(c.checkedAt))
@@ -173,7 +176,18 @@ export function renderStatusHtml(
             label: "Pause",
             className: "btn pause",
           });
-      return `<tr class="${c.paused ? "row-paused" : ""}">
+      const attention = needsAttention(c) ? "1" : "0";
+      const healthy = isHealthy(c) ? "1" : "0";
+      return `<tr class="${c.paused ? "row-paused" : ""}"
+        data-name="${escapeAttr(c.name.toLowerCase())}"
+        data-id="${escapeAttr(c.companyId.toLowerCase())}"
+        data-status="${escapeAttr(c.status)}"
+        data-paused="${c.paused ? "1" : "0"}"
+        data-attention="${attention}"
+        data-healthy="${healthy}"
+        data-rank="${statusSortRank(c)}"
+        data-checked="${escapeAttr(c.checkedAt ?? "")}"
+        data-matched="${c.matched}">
         <td><strong>${escapeHtml(c.name)}</strong><br><code>${escapeHtml(c.companyId)}</code></td>
         <td>${pauseBadge}<span class="badge ${c.status}">${c.status}</span></td>
         <td>${checked}</td>
@@ -200,7 +214,15 @@ export function renderStatusHtml(
         className: "btn pause global",
       });
 
-  const pausedCount = status.companies.filter((c) => c.paused).length;
+  const attentionList = sorted
+    .filter(needsAttention)
+    .map(
+      (c) =>
+        `<li><strong>${escapeHtml(c.name)}</strong> <span class="badge ${c.status}">${c.status}</span>${
+          c.paused ? ` <span class="badge paused">paused</span>` : ""
+        }${c.error ? ` — <span class="attn-err">${escapeHtml(truncate(c.error, 90))}</span>` : ""}</li>`,
+    )
+    .join("");
 
   return `<!doctype html>
 <html lang="en">
@@ -212,8 +234,27 @@ export function renderStatusHtml(
     :root { color-scheme: light dark; --ok:#16a34a; --fail:#dc2626; --seed:#2563eb; --skip:#d97706; --never:#6b7280; --paused:#7c3aed; }
     body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 1.25rem; line-height: 1.4; }
     h1 { font-size: 1.25rem; margin: 0 0 .5rem; }
-    .meta { color: #6b7280; margin-bottom: 1rem; font-size: .9rem; }
-    .controls { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-bottom: 1rem; }
+    .meta { color: #6b7280; margin-bottom: .75rem; font-size: .9rem; }
+    .summary { display: flex; flex-wrap: wrap; gap: .45rem; margin-bottom: .85rem; }
+    .chip { appearance: none; border: 1px solid #d1d5db; background: #f9fafb; color: inherit; border-radius: 999px; padding: .28rem .7rem; font-size: .8rem; font-weight: 600; cursor: pointer; }
+    .chip.active { background: #111827; color: #fff; border-color: #111827; }
+    .chip .n { font-variant-numeric: tabular-nums; margin-left: .2rem; opacity: .85; }
+    .chip.ok .n { color: var(--ok); } .chip.active.ok .n { color: #86efac; }
+    .chip.failed .n { color: var(--fail); } .chip.active.failed .n { color: #fca5a5; }
+    .chip.skipped .n { color: var(--skip); } .chip.active.skipped .n { color: #fcd34d; }
+    .chip.paused .n { color: var(--paused); } .chip.active.paused .n { color: #c4b5fd; }
+    .chip.attention .n { color: var(--fail); } .chip.active.attention .n { color: #fca5a5; }
+    .attention-box { margin-bottom: 1rem; padding: .65rem .8rem; border-radius: .5rem; border: 1px solid color-mix(in srgb, var(--fail) 35%, transparent); background: color-mix(in srgb, var(--fail) 8%, transparent); font-size: .85rem; }
+    .attention-box h2 { font-size: .8rem; margin: 0 0 .4rem; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
+    .attention-box ul { margin: 0; padding-left: 1.1rem; }
+    .attention-box li { margin: .2rem 0; }
+    .attn-err { color: #6b7280; }
+    .controls { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-bottom: .75rem; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-bottom: 1rem; }
+    .toolbar label { font-size: .8rem; color: #6b7280; }
+    .toolbar input[type="search"] { min-width: 12rem; flex: 1; max-width: 20rem; border: 1px solid #d1d5db; border-radius: .4rem; padding: .35rem .55rem; font: inherit; background: transparent; color: inherit; }
+    .toolbar select { border: 1px solid #d1d5db; border-radius: .4rem; padding: .35rem .5rem; font: inherit; background: transparent; color: inherit; }
+    .shown { font-size: .8rem; color: #6b7280; margin-left: auto; }
     .banner { padding: .65rem .8rem; border-radius: .5rem; margin-bottom: 1rem; font-size: .9rem; }
     .banner.paused { background: color-mix(in srgb, var(--paused) 18%, transparent); border: 1px solid color-mix(in srgb, var(--paused) 45%, transparent); }
     table { width: 100%; border-collapse: collapse; font-size: .9rem; }
@@ -235,7 +276,13 @@ export function renderStatusHtml(
     .btn.resume { border-color: color-mix(in srgb, var(--ok) 50%, #d1d5db); }
     .btn.global { padding: .45rem .75rem; }
     tr.row-paused { opacity: .72; }
+    tr.is-hidden { display: none; }
     form.inline { display: inline; margin: 0; }
+    @media (prefers-color-scheme: dark) {
+      .chip { background: #1f2937; border-color: #374151; }
+      .chip.active { background: #f3f4f6; color: #111827; border-color: #f3f4f6; }
+      .btn { background: #1f2937; border-color: #374151; }
+    }
   </style>
 </head>
 <body>
@@ -248,16 +295,48 @@ export function renderStatusHtml(
         ? ` · companies ${status.lastRun.companies} · new ${status.lastRun.newJobs} · failures ${status.lastRun.failures} · skipped ${status.lastRun.skipped ?? 0}`
         : ""
     }
-    ${pausedCount ? ` · company pauses ${pausedCount}` : ""}
   </div>
   ${
     status.globalPaused
       ? `<div class="banner paused"><strong>Global pause is on</strong> — cron and <code>/run</code> skip all companies. Last-check rows are preserved.</div>`
       : ""
   }
+  <div class="summary" id="summary-chips" role="group" aria-label="Status filters">
+    <button type="button" class="chip active" data-filter="all">All <span class="n">${counts.total}</span></button>
+    <button type="button" class="chip attention" data-filter="attention">Needs attention <span class="n">${counts.attention}</span></button>
+    <button type="button" class="chip failed" data-filter="failed">Failed <span class="n">${counts.failed}</span></button>
+    <button type="button" class="chip skipped" data-filter="skipped">Skipped <span class="n">${counts.skipped}</span></button>
+    <button type="button" class="chip paused" data-filter="paused">Paused <span class="n">${counts.paused}</span></button>
+    <button type="button" class="chip ok" data-filter="healthy">Healthy <span class="n">${counts.healthy}</span></button>
+    <button type="button" class="chip" data-filter="seeded">Seeded <span class="n">${counts.seeded}</span></button>
+    <button type="button" class="chip" data-filter="never">Never <span class="n">${counts.never}</span></button>
+  </div>
+  ${
+    counts.attention
+      ? `<div class="attention-box" id="attention-box">
+    <h2>Needs attention (${counts.attention})</h2>
+    <ul>${attentionList}</ul>
+  </div>`
+      : `<div class="attention-box" id="attention-box" hidden>
+    <h2>Needs attention</h2>
+    <ul></ul>
+  </div>`
+  }
   <div class="controls">
     ${globalBtn}
     <a class="btn" href="${escapeAttr(statusHref)}">Refresh</a>
+  </div>
+  <div class="toolbar">
+    <label for="q">Search</label>
+    <input id="q" type="search" placeholder="Company name or id" autocomplete="off" />
+    <label for="sort">Sort</label>
+    <select id="sort">
+      <option value="attention" selected>Attention first</option>
+      <option value="name">Name A–Z</option>
+      <option value="checked">Last check (newest)</option>
+      <option value="matched">Matched (high→low)</option>
+    </select>
+    <span class="shown" id="shown-count"></span>
   </div>
   <table>
     <thead>
@@ -272,12 +351,172 @@ export function renderStatusHtml(
         <th>Control</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody id="company-rows">
       ${rows || `<tr><td colspan="8">No companies configured</td></tr>`}
     </tbody>
   </table>
+  <script>
+    (function () {
+      const tbody = document.getElementById("company-rows");
+      const q = document.getElementById("q");
+      const sort = document.getElementById("sort");
+      const shown = document.getElementById("shown-count");
+      const chips = document.getElementById("summary-chips");
+      const attentionBox = document.getElementById("attention-box");
+      if (!tbody || !q || !sort || !chips) return;
+
+      let filter = "all";
+      const rows = Array.from(tbody.querySelectorAll("tr[data-id]"));
+
+      function apply() {
+        const query = (q.value || "").trim().toLowerCase();
+        let visible = 0;
+        for (const row of rows) {
+          const status = row.dataset.status || "";
+          const paused = row.dataset.paused === "1";
+          const attention = row.dataset.attention === "1";
+          const healthy = row.dataset.healthy === "1";
+          const name = row.dataset.name || "";
+          const id = row.dataset.id || "";
+          let ok = true;
+          if (filter === "attention") ok = attention;
+          else if (filter === "failed") ok = status === "failed";
+          else if (filter === "skipped") ok = status === "skipped";
+          else if (filter === "paused") ok = paused;
+          else if (filter === "healthy") ok = healthy;
+          else if (filter === "seeded") ok = status === "seeded";
+          else if (filter === "never") ok = status === "never";
+          if (ok && query) ok = name.includes(query) || id.includes(query);
+          row.classList.toggle("is-hidden", !ok);
+          if (ok) visible += 1;
+        }
+        shown.textContent = "Showing " + visible + " / " + rows.length;
+        if (attentionBox) {
+          attentionBox.hidden = filter !== "all" && filter !== "attention";
+        }
+      }
+
+      function resort() {
+        const mode = sort.value;
+        const ranked = rows.slice().sort(function (a, b) {
+          if (mode === "name") {
+            return (a.dataset.name || "").localeCompare(b.dataset.name || "");
+          }
+          if (mode === "matched") {
+            const am = Number(a.dataset.matched || 0);
+            const bm = Number(b.dataset.matched || 0);
+            return bm - am || (a.dataset.name || "").localeCompare(b.dataset.name || "");
+          }
+          if (mode === "checked") {
+            const ac = a.dataset.checked || "";
+            const bc = b.dataset.checked || "";
+            if (!ac && !bc) return (a.dataset.name || "").localeCompare(b.dataset.name || "");
+            if (!ac) return 1;
+            if (!bc) return -1;
+            return bc.localeCompare(ac) || (a.dataset.name || "").localeCompare(b.dataset.name || "");
+          }
+          // attention first
+          const ar = Number(a.dataset.rank || 99);
+          const br = Number(b.dataset.rank || 99);
+          return ar - br || (a.dataset.name || "").localeCompare(b.dataset.name || "");
+        });
+        for (const row of ranked) tbody.appendChild(row);
+        apply();
+      }
+
+      chips.addEventListener("click", function (e) {
+        const btn = e.target.closest("[data-filter]");
+        if (!btn) return;
+        filter = btn.getAttribute("data-filter") || "all";
+        for (const c of chips.querySelectorAll(".chip")) c.classList.remove("active");
+        btn.classList.add("active");
+        apply();
+      });
+      q.addEventListener("input", apply);
+      sort.addEventListener("change", resort);
+      apply();
+    })();
+  </script>
 </body>
 </html>`;
+}
+
+function needsAttention(c: CompanyRunStatus): boolean {
+  return (
+    c.status === "failed" ||
+    c.status === "skipped" ||
+    c.status === "never" ||
+    !c.bootstrapped
+  );
+}
+
+function isHealthy(c: CompanyRunStatus): boolean {
+  return (
+    !c.paused &&
+    c.bootstrapped &&
+    (c.status === "ok" || c.status === "seeded")
+  );
+}
+
+function statusSortRank(c: CompanyRunStatus): number {
+  // Lower = higher priority in "attention first"
+  if (c.status === "failed") return 0;
+  if (c.status === "skipped") return 1;
+  if (c.status === "never") return 2;
+  if (!c.bootstrapped) return 3;
+  if (c.paused) return 4;
+  if (c.status === "seeded") return 5;
+  return 6;
+}
+
+function compareCompaniesForStatus(
+  a: CompanyRunStatus,
+  b: CompanyRunStatus,
+): number {
+  return (
+    statusSortRank(a) - statusSortRank(b) ||
+    a.name.localeCompare(b.name)
+  );
+}
+
+function summarizeCompanies(companies: CompanyRunStatus[]): {
+  total: number;
+  ok: number;
+  seeded: number;
+  failed: number;
+  skipped: number;
+  never: number;
+  paused: number;
+  attention: number;
+  healthy: number;
+} {
+  const counts = {
+    total: companies.length,
+    ok: 0,
+    seeded: 0,
+    failed: 0,
+    skipped: 0,
+    never: 0,
+    paused: 0,
+    attention: 0,
+    healthy: 0,
+  };
+  for (const c of companies) {
+    if (c.status === "ok") counts.ok += 1;
+    else if (c.status === "seeded") counts.seeded += 1;
+    else if (c.status === "failed") counts.failed += 1;
+    else if (c.status === "skipped") counts.skipped += 1;
+    else if (c.status === "never") counts.never += 1;
+    if (c.paused) counts.paused += 1;
+    if (needsAttention(c)) counts.attention += 1;
+    if (isHealthy(c)) counts.healthy += 1;
+  }
+  return counts;
+}
+
+function truncate(value: string, max: number): string {
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 1)}…`;
 }
 
 function pauseForm(
