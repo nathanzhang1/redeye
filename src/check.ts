@@ -6,6 +6,10 @@ import { COMPANIES, type Company } from "./companies";
 import { notifyNewJobs, notifyScrapeFailure } from "./discord";
 import { extractJobs, fetchCareerPage, type JobListing } from "./parse";
 import {
+  getPausedCompanyIds,
+  isGlobalPaused,
+} from "./control";
+import {
   BROWSER_MIN_INTERVAL_MS,
   MAX_BROWSER_COMPANIES_PER_RUN,
   browserDueMs,
@@ -46,9 +50,57 @@ export async function checkAll(env: Env): Promise<CheckSummary> {
     details: [],
   };
 
-  const browserPlan = await planBrowserCompanies(env.SEEN_JOBS);
+  if (await isGlobalPaused(env.SEEN_JOBS)) {
+    for (const company of COMPANIES) {
+      summary.details.push({
+        companyId: company.id,
+        status: "skipped",
+        matched: 0,
+        notified: 0,
+        error: "Paused (global)",
+      });
+      summary.skipped += 1;
+    }
+    // Do not overwrite per-company last-check rows — pause is control state.
+    await saveLastRun(env.SEEN_JOBS, summary);
+    console.log(
+      JSON.stringify({
+        event: "check_complete",
+        paused: "global",
+        ...summary,
+      }),
+    );
+    return summary;
+  }
+
+  const pausedCompanies = await getPausedCompanyIds(env.SEEN_JOBS);
+  const browserPlan = await planBrowserCompanies(
+    env.SEEN_JOBS,
+    pausedCompanies,
+  );
 
   for (const company of COMPANIES) {
+    if (pausedCompanies.has(company.id)) {
+      const detail = {
+        companyId: company.id,
+        status: "skipped" as const,
+        matched: 0,
+        notified: 0,
+        error: "Paused",
+      };
+      summary.details.push(detail);
+      summary.skipped += 1;
+      // Keep last real check status on the dashboard.
+      console.log(
+        JSON.stringify({
+          event: "company_skipped",
+          companyId: company.id,
+          reason: "paused",
+        }),
+      );
+      continue;
+    }
+
     const usesBrowser = (company.fetchMode ?? "html") === "browser";
     if (usesBrowser && !browserPlan.runIds.has(company.id)) {
       const reason =
@@ -100,7 +152,10 @@ export async function checkAll(env: Env): Promise<CheckSummary> {
   return summary;
 }
 
-async function planBrowserCompanies(kv: KVNamespace): Promise<{
+async function planBrowserCompanies(
+  kv: KVNamespace,
+  pausedCompanies: Set<string> = new Set(),
+): Promise<{
   runIds: Set<string>;
   skipReasons: Map<string, string>;
 }> {
@@ -112,6 +167,7 @@ async function planBrowserCompanies(kv: KVNamespace): Promise<{
   if (cooldownUntil && cooldownUntil > now) {
     const mins = Math.ceil((cooldownUntil - now) / 60_000);
     for (const company of COMPANIES) {
+      if (pausedCompanies.has(company.id)) continue;
       if ((company.fetchMode ?? "html") === "browser") {
         skipReasons.set(
           company.id,
@@ -127,6 +183,7 @@ async function planBrowserCompanies(kv: KVNamespace): Promise<{
   const notDue: Candidate[] = [];
 
   for (const company of COMPANIES) {
+    if (pausedCompanies.has(company.id)) continue;
     if ((company.fetchMode ?? "html") !== "browser") continue;
     const last = await getBrowserLastAttempt(kv, company.id);
     const dueIn = browserDueMs(last, now);

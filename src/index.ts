@@ -1,6 +1,7 @@
 import { fetchRenderedHtml } from "./browser";
 import { checkAll } from "./check";
 import { COMPANIES } from "./companies";
+import { setCompanyPaused, setGlobalPaused } from "./control";
 import { notifyNewJobs } from "./discord";
 import { extractJobs } from "./parse";
 import { getTrackerStatus, renderStatusHtml } from "./status";
@@ -34,7 +35,8 @@ export default {
         url.searchParams.get("format") === "html" ||
         (request.headers.get("Accept") ?? "").includes("text/html");
       if (wantsHtml) {
-        return new Response(renderStatusHtml(status), {
+        const token = statusPageToken(request, url) ?? env.RUN_SECRET;
+        return new Response(renderStatusHtml(status, { token }), {
           headers: {
             "Content-Type": "text/html; charset=utf-8",
             "Cache-Control": "no-store",
@@ -43,6 +45,55 @@ export default {
       }
       return Response.json(status, {
         headers: { "Cache-Control": "no-store" },
+      });
+    }
+
+    if (request.method === "POST" && url.pathname === "/control/pause") {
+      if (!authorize(request, env.RUN_SECRET, url)) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+
+      const body = await readPauseBody(request);
+      if (!body) {
+        return Response.json(
+          { error: "Expected scope=global|company and paused=true|false" },
+          { status: 400 },
+        );
+      }
+
+      if (body.scope === "global") {
+        await setGlobalPaused(env.SEEN_JOBS, body.paused);
+      } else {
+        if (!body.companyId || !COMPANIES.some((c) => c.id === body.companyId)) {
+          return Response.json(
+            { error: "Unknown or missing companyId" },
+            { status: 400 },
+          );
+        }
+        await setCompanyPaused(env.SEEN_JOBS, body.companyId, body.paused);
+      }
+
+      const wantsHtml =
+        (request.headers.get("Accept") ?? "").includes("text/html") ||
+        (request.headers.get("Content-Type") ?? "").includes(
+          "application/x-www-form-urlencoded",
+        );
+      if (wantsHtml) {
+        const token = statusPageToken(request, url) ?? env.RUN_SECRET;
+        return Response.redirect(
+          new URL(
+            `/status?token=${encodeURIComponent(token)}&format=html`,
+            url,
+          ).toString(),
+          303,
+        );
+      }
+
+      return Response.json({
+        ok: true,
+        scope: body.scope,
+        companyId: body.companyId ?? null,
+        paused: body.paused,
       });
     }
 
@@ -183,6 +234,58 @@ function authorize(
   if (queryToken && timingSafeEqualString(queryToken, secret)) return true;
 
   return false;
+}
+
+function statusPageToken(request: Request, url: URL): string | null {
+  const queryToken = url.searchParams.get("token");
+  if (queryToken) return queryToken;
+  const header = request.headers.get("Authorization");
+  if (header?.startsWith("Bearer ")) return header.slice("Bearer ".length);
+  return null;
+}
+
+type PauseBody = {
+  scope: "global" | "company";
+  companyId?: string;
+  paused: boolean;
+};
+
+async function readPauseBody(request: Request): Promise<PauseBody | null> {
+  const contentType = request.headers.get("Content-Type") ?? "";
+  let scope = "";
+  let companyId = "";
+  let pausedRaw = "";
+
+  if (contentType.includes("application/json")) {
+    let data: unknown;
+    try {
+      data = await request.json();
+    } catch {
+      return null;
+    }
+    if (!data || typeof data !== "object") return null;
+    const obj = data as Record<string, unknown>;
+    scope = typeof obj.scope === "string" ? obj.scope : "";
+    companyId = typeof obj.companyId === "string" ? obj.companyId : "";
+    if (typeof obj.paused === "boolean") pausedRaw = obj.paused ? "true" : "false";
+    else if (typeof obj.paused === "string") pausedRaw = obj.paused;
+  } else {
+    const form = await request.formData();
+    scope = String(form.get("scope") ?? "");
+    companyId = String(form.get("companyId") ?? "");
+    pausedRaw = String(form.get("paused") ?? "");
+  }
+
+  if (scope !== "global" && scope !== "company") return null;
+  if (!["true", "false", "1", "0", "on"].includes(pausedRaw)) return null;
+  const paused =
+    pausedRaw === "true" || pausedRaw === "1" || pausedRaw === "on";
+
+  return {
+    scope,
+    companyId: companyId || undefined,
+    paused,
+  };
 }
 
 function timingSafeEqualString(a: string, b: string): boolean {
