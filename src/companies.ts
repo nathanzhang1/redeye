@@ -644,6 +644,43 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
+    id: "mongodb",
+    name: "MongoDB",
+    // Students & Graduates → Explore roles "Early Talent" (College Students / New Grad).
+    // Human UI: https://www.mongodb.com/company/careers/students-and-graduates
+    // Also PRO/PTO New Grads under Product; US + SWE titles; empty today.
+    url: "https://boards-api.greenhouse.io/v1/boards/mongodb/departments",
+    fetchMode: "html",
+    matchMode: "all_jobs",
+    // Detail: /careers/job/?gh_jid=<id>
+    jobPathPattern: String.raw`/careers/job`,
+    departmentIncludes: ["New Grad", "PRO New Grads", "PTO New Grads"],
+    titleIncludes: ["Engineer", "Software", "SWE", "Machine Learning"],
+    locationIncludes: [
+      "United States",
+      "USA",
+      "Remote North America",
+      "New York",
+      "San Francisco",
+      "Palo Alto",
+      "Austin",
+      "Seattle",
+      "Chicago",
+      "Boston",
+      "Atlanta",
+      "Denver",
+      "Los Angeles",
+      "Washington DC",
+      "Raleigh",
+      "Dallas",
+      "Miami",
+      "California",
+      "Colorado",
+      "Texas",
+    ],
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams
