@@ -313,7 +313,11 @@ async function loadPage(env: Env, company: Company): Promise<string> {
   return html;
 }
 
-/** Fetch several `start=` pages (LinkedIn guest API) and concatenate HTML. */
+/**
+ * Fetch several `start=` pages and combine them.
+ * LinkedIn guest API returns HTML fragments (concat). Eightfold PCSX returns
+ * JSON `{ data: { positions } }` / `{ positions }` — merge those arrays.
+ */
 async function fetchPaginatedCareerPage(company: Company): Promise<string> {
   const offsets = company.fetchStartOffsets ?? [0];
   const chunks: string[] = [];
@@ -324,7 +328,47 @@ async function fetchPaginatedCareerPage(company: Company): Promise<string> {
     const html = await fetchCareerPage(pageUrl.toString(), company.fetchBody);
     if (html && html.length >= 50) chunks.push(html);
   }
-  return chunks.join("\n");
+  return mergePaginatedChunks(chunks);
+}
+
+/** Merge JSON job pages when possible; otherwise concatenate as HTML. */
+function mergePaginatedChunks(chunks: string[]): string {
+  if (chunks.length <= 1) return chunks[0] ?? "";
+  const parsed: unknown[] = [];
+  for (const chunk of chunks) {
+    try {
+      parsed.push(JSON.parse(chunk));
+    } catch {
+      return chunks.join("\n");
+    }
+  }
+  const merged: unknown[] = [];
+  for (const data of parsed) {
+    if (!data || typeof data !== "object") return chunks.join("\n");
+    const obj = data as Record<string, unknown>;
+    if (Array.isArray(obj.positions)) {
+      merged.push(...obj.positions);
+      continue;
+    }
+    if (Array.isArray(obj.jobs)) {
+      merged.push(...obj.jobs);
+      continue;
+    }
+    const inner = obj.data;
+    if (inner && typeof inner === "object") {
+      const d = inner as Record<string, unknown>;
+      if (Array.isArray(d.positions)) {
+        merged.push(...d.positions);
+        continue;
+      }
+      if (Array.isArray(d.jobs)) {
+        merged.push(...d.jobs);
+        continue;
+      }
+    }
+    return chunks.join("\n");
+  }
+  return JSON.stringify({ positions: merged });
 }
 
 function sleep(ms: number): Promise<void> {

@@ -681,6 +681,21 @@ export const COMPANIES: Company[] = [
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
+    id: "paypal",
+    name: "PayPal",
+    // US + Software Engineering (Eightfold PCSX; legacy /api/apply/v2 is 403).
+    // Human UI: https://paypal.eightfold.ai/careers?…&location=united+states&filter_job_category=Software+Engineering
+    // New-grad + SWE keywords on that feed; paginate start= (10/page, ~29 roles).
+    url: "https://paypal.eightfold.ai/api/pcsx/search?domain=paypal.com&query=&location=united+states&start=0&num=10&sort_by=timestamp&filter_include_remote=1&filter_include_relocation=0&filter_job_category=Software+Engineering",
+    fetchMode: "html",
+    matchMode: "keywords",
+    // Detail: /careers/job/<pid>
+    jobPathPattern: String.raw`/careers/job/\d+`,
+    jobUrlTemplate: "https://paypal.eightfold.ai/careers/job/{id}",
+    fetchStartOffsets: [0, 10, 20],
+    titleExcludes: ["Intern", "Internship", "Internships"],
+  },
+  {
     id: "apple",
     name: "Apple",
     // Pre-filtered: Fresh Graduates (General) + US + SWE/ML teams

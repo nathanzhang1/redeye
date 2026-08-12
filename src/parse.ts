@@ -219,8 +219,10 @@ export async function extractJobs(
  * Public JSON job feeds (Amazon search.json, Greenhouse, Oracle HCM, Eightfold, …).
  * Supported shapes:
  * - [{ … }] / { jobs: […] } / { positions: […] } (Eightfold PCS)
+ * - { data: { positions: […] } } (Eightfold PCSX)
  * - { items: [{ requisitionList: […] }] } (Oracle recruitingCEJobRequisitions)
- * Row fields: title|Title|name|posting_name, absolute_url|canonicalPositionUrl|job_path|url,
+ * Row fields: title|Title|name|posting_name,
+ * absolute_url|canonicalPositionUrl|positionUrl|job_path|url,
  * and/or id|Id (+ jobUrlTemplate)
  */
 async function extractJobsFromJson(
@@ -280,6 +282,7 @@ async function extractJobsFromJson(
       (typeof row.absolute_url === "string" && row.absolute_url) ||
       (typeof row.canonicalPositionUrl === "string" &&
         row.canonicalPositionUrl) ||
+      (typeof row.positionUrl === "string" && row.positionUrl) ||
       (typeof row.job_path === "string" && row.job_path) ||
       (typeof row.jobPath === "string" && row.jobPath) ||
       (typeof row.jobUrl === "string" && row.jobUrl) ||
@@ -379,6 +382,9 @@ function jsonJobRows(data: unknown, company: Company): unknown[] | null {
     }
     const jobs = dataObj.jobs;
     if (Array.isArray(jobs)) return unwrapJsonJobHits(jobs);
+    // Eightfold PCSX: { data: { positions: [...] } }
+    const positions = dataObj.positions;
+    if (Array.isArray(positions)) return unwrapJsonJobHits(positions);
   }
 
   // Greenhouse departments: { departments: [{ name, jobs: [...] }] }
