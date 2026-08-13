@@ -6,8 +6,11 @@ import { COMPANIES, type Company } from "./companies";
 import { notifyNewJobs, notifyScrapeFailure } from "./discord";
 import { extractJobs, fetchCareerPage, type JobListing } from "./parse";
 import {
+  COMPANIES_PER_BATCH,
+  getCronCursor,
   getPausedCompanyIds,
   isGlobalPaused,
+  setCronCursor,
 } from "./control";
 import {
   BROWSER_MIN_INTERVAL_MS,
@@ -40,9 +43,22 @@ export type CheckSummary = {
   }>;
 };
 
-export async function checkAll(env: Env): Promise<CheckSummary> {
+export type CheckAllOptions = {
+  /**
+   * When true (cron default), poll the next COMPANIES_PER_BATCH companies and
+   * advance a KV cursor so every board is covered across ticks without blowing
+   * the Free-plan 50 external-subrequest limit.
+   */
+  rotate?: boolean;
+};
+
+export async function checkAll(
+  env: Env,
+  options: CheckAllOptions = {},
+): Promise<CheckSummary> {
+  const rotate = options.rotate ?? false;
   const summary: CheckSummary = {
-    companies: COMPANIES.length,
+    companies: 0,
     newJobs: 0,
     seeded: 0,
     failures: 0,
@@ -51,6 +67,7 @@ export async function checkAll(env: Env): Promise<CheckSummary> {
   };
 
   if (await isGlobalPaused(env.SEEN_JOBS)) {
+    summary.companies = COMPANIES.length;
     for (const company of COMPANIES) {
       summary.details.push({
         companyId: company.id,
@@ -74,12 +91,19 @@ export async function checkAll(env: Env): Promise<CheckSummary> {
   }
 
   const pausedCompanies = await getPausedCompanyIds(env.SEEN_JOBS);
+  const { batch, nextCursor, cursorStart } = await selectCompanyBatch(
+    env.SEEN_JOBS,
+    rotate,
+  );
+  summary.companies = batch.length;
+
   const browserPlan = await planBrowserCompanies(
     env.SEEN_JOBS,
     pausedCompanies,
+    batch,
   );
 
-  for (const company of COMPANIES) {
+  for (const company of batch) {
     if (pausedCompanies.has(company.id)) {
       const detail = {
         companyId: company.id,
@@ -145,11 +169,67 @@ export async function checkAll(env: Env): Promise<CheckSummary> {
         if (id !== company.id) browserPlan.runIds.delete(id);
       }
     }
+
+    // Stop early if the Free subrequest budget is exhausted so we can still
+    // persist lastRun + advance the rotation cursor.
+    if (
+      detail.status === "failed" &&
+      detail.error?.includes("Too many subrequests")
+    ) {
+      console.log(
+        JSON.stringify({
+          event: "batch_aborted_subrequests",
+          companyId: company.id,
+        }),
+      );
+      break;
+    }
+  }
+
+  if (rotate) {
+    await setCronCursor(env.SEEN_JOBS, nextCursor);
   }
 
   await saveLastRun(env.SEEN_JOBS, summary);
-  console.log(JSON.stringify({ event: "check_complete", ...summary }));
+  console.log(
+    JSON.stringify({
+      event: "check_complete",
+      rotate,
+      cursorStart,
+      nextCursor: rotate ? nextCursor : undefined,
+      batchSize: batch.length,
+      ...summary,
+    }),
+  );
   return summary;
+}
+
+async function selectCompanyBatch(
+  kv: KVNamespace,
+  rotate: boolean,
+): Promise<{
+  batch: Company[];
+  nextCursor: number;
+  cursorStart: number;
+}> {
+  if (!COMPANIES.length) {
+    return { batch: [], nextCursor: 0, cursorStart: 0 };
+  }
+  if (!rotate) {
+    return {
+      batch: [...COMPANIES],
+      nextCursor: 0,
+      cursorStart: 0,
+    };
+  }
+  const cursorStart = (await getCronCursor(kv)) % COMPANIES.length;
+  const size = Math.min(COMPANIES_PER_BATCH, COMPANIES.length);
+  const batch: Company[] = [];
+  for (let i = 0; i < size; i++) {
+    batch.push(COMPANIES[(cursorStart + i) % COMPANIES.length]!);
+  }
+  const nextCursor = (cursorStart + size) % COMPANIES.length;
+  return { batch, nextCursor, cursorStart };
 }
 
 /**
@@ -190,6 +270,7 @@ export async function checkOne(
 async function planBrowserCompanies(
   kv: KVNamespace,
   pausedCompanies: Set<string> = new Set(),
+  scope: Company[] = COMPANIES,
 ): Promise<{
   runIds: Set<string>;
   skipReasons: Map<string, string>;
@@ -201,7 +282,7 @@ async function planBrowserCompanies(
   const cooldownUntil = await getBrowserCooldownUntil(kv);
   if (cooldownUntil && cooldownUntil > now) {
     const mins = Math.ceil((cooldownUntil - now) / 60_000);
-    for (const company of COMPANIES) {
+    for (const company of scope) {
       if (pausedCompanies.has(company.id)) continue;
       if ((company.fetchMode ?? "html") === "browser") {
         skipReasons.set(
@@ -217,7 +298,7 @@ async function planBrowserCompanies(
   const due: Candidate[] = [];
   const notDue: Candidate[] = [];
 
-  for (const company of COMPANIES) {
+  for (const company of scope) {
     if (pausedCompanies.has(company.id)) continue;
     if ((company.fetchMode ?? "html") !== "browser") continue;
     const last = await getBrowserLastAttempt(kv, company.id);

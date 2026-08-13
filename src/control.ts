@@ -1,20 +1,38 @@
 const GLOBAL_PAUSED_KEY = "control:global_paused";
 const PAUSED_COMPANIES_KEY = "control:paused_companies";
+const CRON_CURSOR_KEY = "control:cron_cursor";
+
+/** Companies per cron/batch tick — keep Free-plan external subrequests under 50. */
+export const COMPANIES_PER_BATCH = 20;
 
 export type ControlState = {
   globalPaused: boolean;
   pausedCompanyIds: string[];
+  cronCursor: number;
 };
 
 export async function getControlState(kv: KVNamespace): Promise<ControlState> {
-  const [globalRaw, companiesRaw] = await Promise.all([
+  const [globalRaw, companiesRaw, cursorRaw] = await Promise.all([
     kv.get(GLOBAL_PAUSED_KEY),
     kv.get(PAUSED_COMPANIES_KEY),
+    kv.get(CRON_CURSOR_KEY),
   ]);
   return {
     globalPaused: globalRaw === "1",
     pausedCompanyIds: parsePausedCompanies(companiesRaw),
+    cronCursor: parseCursor(cursorRaw),
   };
+}
+
+export async function getCronCursor(kv: KVNamespace): Promise<number> {
+  return parseCursor(await kv.get(CRON_CURSOR_KEY));
+}
+
+export async function setCronCursor(
+  kv: KVNamespace,
+  cursor: number,
+): Promise<void> {
+  await kv.put(CRON_CURSOR_KEY, String(Math.max(0, Math.floor(cursor))));
 }
 
 export async function isGlobalPaused(kv: KVNamespace): Promise<boolean> {
@@ -68,4 +86,10 @@ function parsePausedCompanies(raw: string | null): string[] {
   } catch {
     return [];
   }
+}
+
+function parseCursor(raw: string | null): number {
+  if (!raw) return 0;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
 }

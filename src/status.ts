@@ -1,5 +1,5 @@
 import { COMPANIES, type Company } from "./companies";
-import { getControlState } from "./control";
+import { COMPANIES_PER_BATCH, getControlState } from "./control";
 import { isBootstrapped } from "./seen";
 
 export type CompanyCheckDetail = {
@@ -140,7 +140,7 @@ export async function getTrackerStatus(kv: KVNamespace): Promise<TrackerStatus> 
 }
 
 export type StatusFlash = {
-  ran: "all" | "company";
+  ran: "all" | "batch" | "company";
   companyId?: string;
   runStatus: string;
   matched: number;
@@ -234,10 +234,10 @@ export function renderStatusHtml(
       });
 
   const runAllBtn = runForm(runAction, {
-    label: "Run all",
+    label: "Run batch",
     className: "btn run global",
     title:
-      "Poll every company now (same as cron / POST /run; respects pauses; may take a while)",
+      "Poll the next rotating batch now (same as cron; stays under Free subrequest limits)",
   });
 
   const flashBanner = renderFlashBanner(options.flash, status);
@@ -338,13 +338,14 @@ export function renderStatusHtml(
     Last run: <strong>${status.lastRunAt ? escapeHtml(formatPacificTime(status.lastRunAt)) : "never"}</strong>
     ${
       status.lastRun
-        ? ` · companies ${status.lastRun.companies} · new ${status.lastRun.newJobs} · failures ${status.lastRun.failures} · skipped ${status.lastRun.skipped ?? 0}`
+        ? ` · batch ${status.lastRun.companies}/${status.companies.length} · new ${status.lastRun.newJobs} · failures ${status.lastRun.failures} · skipped ${status.lastRun.skipped ?? 0}`
         : ""
     }
+    <br />Cron polls ${COMPANIES_PER_BATCH} companies per tick (rotation) so Free-plan subrequest limits don't abort runs.
   </div>
   ${
     status.globalPaused
-      ? `<div class="banner paused"><strong>Global pause is on</strong> — cron and <strong>Run all</strong> skip all companies. Per-company <strong>Run</strong> still polls that board. Last-check rows are preserved.</div>`
+      ? `<div class="banner paused"><strong>Global pause is on</strong> — cron and <strong>Run batch</strong> skip. Per-company <strong>Run</strong> still polls that board. Last-check rows are preserved.</div>`
       : ""
   }
   ${flashBanner}
@@ -597,7 +598,9 @@ function renderFlashBanner(
   const who =
     flash.ran === "company"
       ? `<strong>${escapeHtml(companyName ?? "company")}</strong>`
-      : "<strong>All companies</strong>";
+      : flash.ran === "batch"
+        ? "<strong>Next batch</strong>"
+        : "<strong>All companies</strong>";
   const err = flash.error
     ? `<br /><span class="attn-err">${escapeHtml(flash.error)}</span>`
     : "";
@@ -606,7 +609,7 @@ function renderFlashBanner(
     · status <span class="badge ${escapeAttr(flash.runStatus)}">${escapeHtml(flash.runStatus)}</span>
     · matched ${flash.matched}
     · notified ${flash.notified}
-    ${flash.ran === "all" ? `· failures ${flash.failures} · skipped ${flash.skipped}` : ""}
+    ${flash.ran !== "company" ? `· failures ${flash.failures} · skipped ${flash.skipped}` : ""}
     ${err}
   </div>`;
 }

@@ -12,7 +12,9 @@ export default {
     env: Env,
     _ctx: ExecutionContext,
   ): Promise<void> {
-    await checkAll(env);
+    // Rotate a small batch each tick — full 47-company polls exceed Free
+    // subrequest limits and abort before lastRun is saved.
+    await checkAll(env, { rotate: true });
   },
 
   async fetch(
@@ -186,15 +188,20 @@ export default {
       }
 
       let companyId: string | undefined;
+      let runAll = false;
       try {
-        companyId = await readRunCompanyId(request, url);
+        const opts = await readRunOptions(request, url);
+        companyId = opts.companyId;
+        runAll = opts.all;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return Response.json({ error: message }, { status: 400 });
       }
+      // Default (and dashboard button): same rotating batch as cron so Free
+      // subrequest limits don't abort the run. Pass all=1 / {"all":true} for every company.
       const summary = companyId
         ? await checkOne(env, companyId)
-        : await checkAll(env);
+        : await checkAll(env, { rotate: !runAll });
 
       const wantsHtml =
         (request.headers.get("Accept") ?? "").includes("text/html") ||
@@ -214,7 +221,7 @@ export default {
         const flash = new URLSearchParams({
           format: "html",
           token,
-          ran: companyId ? "company" : "all",
+          ran: companyId ? "company" : runAll ? "all" : "batch",
           runStatus,
           matched: String(
             companyId
@@ -300,36 +307,45 @@ function statusPageToken(request: Request, url: URL): string | null {
   return null;
 }
 
-async function readRunCompanyId(
+async function readRunOptions(
   request: Request,
   url: URL,
-): Promise<string | undefined> {
+): Promise<{ companyId?: string; all: boolean }> {
+  const allFromQuery = url.searchParams.get("all") === "1";
   const fromQuery = url.searchParams.get("companyId")?.trim();
   if (fromQuery) {
     if (!COMPANIES.some((c) => c.id === fromQuery)) {
       throw new Error(`Unknown companyId: ${fromQuery}`);
     }
-    return fromQuery;
+    return { companyId: fromQuery, all: false };
   }
 
   const contentType = request.headers.get("Content-Type") ?? "";
   if (contentType.includes("application/json")) {
     try {
-      const data = (await request.json()) as { companyId?: unknown };
+      const data = (await request.json()) as {
+        companyId?: unknown;
+        all?: unknown;
+      };
+      const all =
+        allFromQuery ||
+        data.all === true ||
+        data.all === 1 ||
+        data.all === "1";
       if (typeof data.companyId === "string" && data.companyId.trim()) {
         const id = data.companyId.trim();
         if (!COMPANIES.some((c) => c.id === id)) {
           throw new Error(`Unknown companyId: ${id}`);
         }
-        return id;
+        return { companyId: id, all: false };
       }
+      return { all };
     } catch (error) {
       if (error instanceof Error && error.message.startsWith("Unknown")) {
         throw error;
       }
-      // empty / invalid JSON body → run all
+      return { all: allFromQuery };
     }
-    return undefined;
   }
 
   if (
@@ -338,21 +354,25 @@ async function readRunCompanyId(
   ) {
     const form = await request.formData();
     const id = String(form.get("companyId") ?? "").trim();
-    if (!id) return undefined;
+    const all =
+      allFromQuery ||
+      String(form.get("all") ?? "") === "1" ||
+      String(form.get("all") ?? "") === "true";
+    if (!id) return { all };
     if (!COMPANIES.some((c) => c.id === id)) {
       throw new Error(`Unknown companyId: ${id}`);
     }
-    return id;
+    return { companyId: id, all: false };
   }
 
-  return undefined;
+  return { all: allFromQuery };
 }
 
 function parseRunFlash(
   url: URL,
 ):
   | {
-      ran: "all" | "company";
+      ran: "all" | "batch" | "company";
       companyId?: string;
       runStatus: string;
       matched: number;
@@ -363,7 +383,7 @@ function parseRunFlash(
     }
   | undefined {
   const ran = url.searchParams.get("ran");
-  if (ran !== "all" && ran !== "company") return undefined;
+  if (ran !== "all" && ran !== "batch" && ran !== "company") return undefined;
   return {
     ran,
     companyId: url.searchParams.get("companyId") ?? undefined,
