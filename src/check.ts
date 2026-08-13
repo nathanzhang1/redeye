@@ -91,7 +91,7 @@ export async function checkAll(
   }
 
   const pausedCompanies = await getPausedCompanyIds(env.SEEN_JOBS);
-  const { batch, nextCursor, cursorStart } = await selectCompanyBatch(
+  const { batch, cursorStart } = await selectCompanyBatch(
     env.SEEN_JOBS,
     rotate,
   );
@@ -103,104 +103,120 @@ export async function checkAll(
     batch,
   );
 
-  for (const company of batch) {
-    if (pausedCompanies.has(company.id)) {
-      const detail = {
-        companyId: company.id,
-        status: "skipped" as const,
-        matched: 0,
-        notified: 0,
-        error: "Paused",
-      };
-      summary.details.push(detail);
-      summary.skipped += 1;
-      // Keep last real check status on the dashboard.
-      console.log(
-        JSON.stringify({
-          event: "company_skipped",
+  let processed = 0;
+  let abortedSubrequests = false;
+  try {
+    for (const company of batch) {
+      if (pausedCompanies.has(company.id)) {
+        const detail = {
           companyId: company.id,
-          reason: "paused",
-        }),
-      );
-      continue;
-    }
+          status: "skipped" as const,
+          matched: 0,
+          notified: 0,
+          error: "Paused",
+        };
+        summary.details.push(detail);
+        summary.skipped += 1;
+        // Keep last real check status on the dashboard.
+        console.log(
+          JSON.stringify({
+            event: "company_skipped",
+            companyId: company.id,
+            reason: "paused",
+          }),
+        );
+      } else {
+        const usesBrowser = (company.fetchMode ?? "html") === "browser";
+        if (usesBrowser && !browserPlan.runIds.has(company.id)) {
+          const reason =
+            browserPlan.skipReasons.get(company.id) ??
+            "Browser poll skipped (quota budget)";
+          const detail = {
+            companyId: company.id,
+            status: "skipped" as const,
+            matched: 0,
+            notified: 0,
+            error: reason,
+          };
+          summary.details.push(detail);
+          summary.skipped += 1;
+          await saveRunStatus(env.SEEN_JOBS, company, detail);
+          console.log(
+            JSON.stringify({
+              event: "company_skipped",
+              companyId: company.id,
+              reason,
+            }),
+          );
+        } else {
+          const detail = await checkCompany(env, company);
+          summary.details.push(detail);
+          if (detail.status === "failed") summary.failures += 1;
+          if (detail.status === "seeded") summary.seeded += 1;
+          if (detail.status === "skipped") summary.skipped += 1;
+          summary.newJobs += detail.notified;
+          await saveRunStatus(env.SEEN_JOBS, company, detail);
 
-    const usesBrowser = (company.fetchMode ?? "html") === "browser";
-    if (usesBrowser && !browserPlan.runIds.has(company.id)) {
-      const reason =
-        browserPlan.skipReasons.get(company.id) ??
-        "Browser poll skipped (quota budget)";
-      const detail = {
-        companyId: company.id,
-        status: "skipped" as const,
-        matched: 0,
-        notified: 0,
-        error: reason,
-      };
-      summary.details.push(detail);
-      summary.skipped += 1;
-      await saveRunStatus(env.SEEN_JOBS, company, detail);
-      console.log(
-        JSON.stringify({
-          event: "company_skipped",
-          companyId: company.id,
-          reason,
-        }),
-      );
-      continue;
-    }
+          if (
+            usesBrowser &&
+            detail.status === "failed" &&
+            detail.error?.includes("429")
+          ) {
+            await setBrowserCooldown(env.SEEN_JOBS);
+            // Drop any remaining planned browser companies this run.
+            for (const id of [...browserPlan.runIds]) {
+              if (id !== company.id) browserPlan.runIds.delete(id);
+            }
+          }
 
-    const detail = await checkCompany(env, company);
-    summary.details.push(detail);
-    if (detail.status === "failed") summary.failures += 1;
-    if (detail.status === "seeded") summary.seeded += 1;
-    if (detail.status === "skipped") summary.skipped += 1;
-    summary.newJobs += detail.notified;
-    await saveRunStatus(env.SEEN_JOBS, company, detail);
-
-    if (
-      usesBrowser &&
-      detail.status === "failed" &&
-      detail.error?.includes("429")
-    ) {
-      await setBrowserCooldown(env.SEEN_JOBS);
-      // Drop any remaining planned browser companies this run.
-      for (const id of [...browserPlan.runIds]) {
-        if (id !== company.id) browserPlan.runIds.delete(id);
+          if (
+            detail.status === "failed" &&
+            detail.error?.includes("Too many subrequests")
+          ) {
+            abortedSubrequests = true;
+            console.log(
+              JSON.stringify({
+                event: "batch_aborted_subrequests",
+                companyId: company.id,
+              }),
+            );
+          }
+        }
       }
+
+      // Persist progress after each company so a killed isolate does not
+      // retry the same starting index forever.
+      processed += 1;
+      if (rotate && COMPANIES.length) {
+        await setCronCursor(
+          env.SEEN_JOBS,
+          (cursorStart + processed) % COMPANIES.length,
+        );
+      }
+      await saveLastRun(env.SEEN_JOBS, summary);
+
+      if (abortedSubrequests) break;
     }
-
-    // Stop early if the Free subrequest budget is exhausted so we can still
-    // persist lastRun + advance the rotation cursor.
-    if (
-      detail.status === "failed" &&
-      detail.error?.includes("Too many subrequests")
-    ) {
-      console.log(
-        JSON.stringify({
-          event: "batch_aborted_subrequests",
-          companyId: company.id,
-        }),
-      );
-      break;
+  } finally {
+    const nextCursor = COMPANIES.length
+      ? (cursorStart + processed) % COMPANIES.length
+      : 0;
+    if (rotate) {
+      await setCronCursor(env.SEEN_JOBS, nextCursor);
     }
+    await saveLastRun(env.SEEN_JOBS, summary);
+    console.log(
+      JSON.stringify({
+        event: "check_complete",
+        rotate,
+        cursorStart,
+        nextCursor: rotate ? nextCursor : undefined,
+        processed,
+        batchSize: batch.length,
+        ...summary,
+      }),
+    );
   }
-
-  if (rotate) {
-    await setCronCursor(env.SEEN_JOBS, nextCursor);
-  }
-
-  await saveLastRun(env.SEEN_JOBS, summary);
-  console.log(
-    JSON.stringify({
-      event: "check_complete",
-      rotate,
-      cursorStart,
-      nextCursor: rotate ? nextCursor : undefined,
-      batchSize: batch.length,
-      ...summary,
-    }),
-  );
   return summary;
 }
 
@@ -209,16 +225,14 @@ async function selectCompanyBatch(
   rotate: boolean,
 ): Promise<{
   batch: Company[];
-  nextCursor: number;
   cursorStart: number;
 }> {
   if (!COMPANIES.length) {
-    return { batch: [], nextCursor: 0, cursorStart: 0 };
+    return { batch: [], cursorStart: 0 };
   }
   if (!rotate) {
     return {
       batch: [...COMPANIES],
-      nextCursor: 0,
       cursorStart: 0,
     };
   }
@@ -228,8 +242,7 @@ async function selectCompanyBatch(
   for (let i = 0; i < size; i++) {
     batch.push(COMPANIES[(cursorStart + i) % COMPANIES.length]!);
   }
-  const nextCursor = (cursorStart + size) % COMPANIES.length;
-  return { batch, nextCursor, cursorStart };
+  return { batch, cursorStart };
 }
 
 /**

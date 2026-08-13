@@ -51,7 +51,7 @@ npm run dev
 npm run deploy
 ```
 
-Cron `*/10 * * * *` runs on UTC in production. Each tick polls the next **20** companies (KV cursor) so Free-plan **50 external subrequests**/invocation are not exceeded; full coverage ≈ every 30 minutes.
+Cron `*/10 * * * *` runs on UTC in production. Each tick polls the next **20** companies (KV cursor) so Free-plan **50 external subrequests**/invocation are not exceeded; full coverage ≈ every 30 minutes. The cursor advances after each company so a killed tick does not freeze rotation.
 
 ## Companies
 
