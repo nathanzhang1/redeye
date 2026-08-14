@@ -7,10 +7,9 @@ import { notifyNewJobs, notifyScrapeFailure } from "./discord";
 import { extractJobs, fetchCareerPage, type JobListing } from "./parse";
 import {
   COMPANIES_PER_BATCH,
-  getCronCursor,
+  CRON_INTERVAL_MS,
   getPausedCompanyIds,
   isGlobalPaused,
-  setCronCursor,
 } from "./control";
 import {
   BROWSER_MIN_INTERVAL_MS,
@@ -26,7 +25,7 @@ import {
   setBrowserCooldown,
   shouldAlertFailure,
 } from "./seen";
-import { saveLastRun, saveRunStatus } from "./status";
+import { recordPollTick, saveLastRun, saveRunStatus } from "./status";
 
 export type CheckSummary = {
   companies: number;
@@ -45,9 +44,8 @@ export type CheckSummary = {
 
 export type CheckAllOptions = {
   /**
-   * When true (cron default), poll the next COMPANIES_PER_BATCH companies and
-   * advance a KV cursor so every board is covered across ticks without blowing
-   * the Free-plan 50 external-subrequest limit.
+   * When true (cron default), poll COMPANIES_PER_BATCH companies chosen from
+   * the current 5-minute time slot (no KV cursor).
    */
   rotate?: boolean;
 };
@@ -79,7 +77,7 @@ export async function checkAll(
       summary.skipped += 1;
     }
     // Do not overwrite per-company last-check rows — pause is control state.
-    await saveLastRun(env.SEEN_JOBS, summary);
+    await recordPollTickSafe(env.SEEN_JOBS, []);
     console.log(
       JSON.stringify({
         event: "check_complete",
@@ -91,10 +89,7 @@ export async function checkAll(
   }
 
   const pausedCompanies = await getPausedCompanyIds(env.SEEN_JOBS);
-  const { batch, cursorStart } = await selectCompanyBatch(
-    env.SEEN_JOBS,
-    rotate,
-  );
+  const { batch, cursorStart } = selectCompanyBatch(rotate);
   summary.companies = batch.length;
 
   const browserPlan = await planBrowserCompanies(
@@ -184,33 +179,23 @@ export async function checkAll(
         }
       }
 
-      // Persist progress after each company so a killed isolate does not
-      // retry the same starting index forever.
       processed += 1;
-      if (rotate && COMPANIES.length) {
-        await setCronCursor(
-          env.SEEN_JOBS,
-          (cursorStart + processed) % COMPANIES.length,
-        );
-      }
-      await saveLastRun(env.SEEN_JOBS, summary);
-
       if (abortedSubrequests) break;
     }
   } finally {
-    const nextCursor = COMPANIES.length
-      ? (cursorStart + processed) % COMPANIES.length
-      : 0;
-    if (rotate) {
-      await setCronCursor(env.SEEN_JOBS, nextCursor);
+    const polledIds = summary.details
+      .filter((detail) => detail.status !== "skipped")
+      .map((detail) => detail.companyId);
+    await recordPollTickSafe(env.SEEN_JOBS, polledIds);
+    // Last-run row only when something happened — not every quiet tick.
+    if (summary.newJobs > 0 || summary.seeded > 0) {
+      await saveLastRun(env.SEEN_JOBS, summary);
     }
-    await saveLastRun(env.SEEN_JOBS, summary);
     console.log(
       JSON.stringify({
         event: "check_complete",
         rotate,
         cursorStart,
-        nextCursor: rotate ? nextCursor : undefined,
         processed,
         batchSize: batch.length,
         ...summary,
@@ -220,13 +205,26 @@ export async function checkAll(
   return summary;
 }
 
-async function selectCompanyBatch(
+async function recordPollTickSafe(
   kv: KVNamespace,
-  rotate: boolean,
-): Promise<{
+  polledCompanyIds: string[],
+): Promise<void> {
+  try {
+    await recordPollTick(kv, polledCompanyIds);
+  } catch (error) {
+    console.log(
+      JSON.stringify({
+        event: "poll_ledger_write_failed",
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  }
+}
+
+function selectCompanyBatch(rotate: boolean): {
   batch: Company[];
   cursorStart: number;
-}> {
+} {
   if (!COMPANIES.length) {
     return { batch: [], cursorStart: 0 };
   }
@@ -236,7 +234,8 @@ async function selectCompanyBatch(
       cursorStart: 0,
     };
   }
-  const cursorStart = (await getCronCursor(kv)) % COMPANIES.length;
+  const tick = Math.floor(Date.now() / CRON_INTERVAL_MS);
+  const cursorStart = (tick * COMPANIES_PER_BATCH) % COMPANIES.length;
   const size = Math.min(COMPANIES_PER_BATCH, COMPANIES.length);
   const batch: Company[] = [];
   for (let i = 0; i < size; i++) {
@@ -261,6 +260,9 @@ export async function checkOne(
 
   const detail = await checkCompany(env, company);
   await saveRunStatus(env.SEEN_JOBS, company, detail);
+  if (detail.status !== "skipped") {
+    await recordPollTickSafe(env.SEEN_JOBS, [company.id]);
+  }
 
   const summary: CheckSummary = {
     companies: 1,

@@ -67,10 +67,10 @@ export async function seedJobs(
 const FAIL_ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 /**
- * Workers Free ≈ 10 browser-minutes/day. Polling Meta+NVIDIA every 10 minutes
+ * Workers Free ≈ 10 browser-minutes/day. Polling Meta+NVIDIA every 5 minutes
  * burns the budget immediately. Space browser companies out.
  */
-export const BROWSER_MIN_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 hours
+export const BROWSER_MIN_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 export const BROWSER_RATE_LIMIT_COOLDOWN_MS = 4 * 60 * 60 * 1000; // 4 hours
 export const MAX_BROWSER_COMPANIES_PER_RUN = 1;
 

@@ -863,15 +863,18 @@ export const COMPANIES: Company[] = [
   {
     id: "nvidia",
     name: "NVIDIA",
-    url: "https://jobs.nvidia.com/careers?start=0&location=united+states&pid=893396905668&sort_by=timestamp&filter_include_remote=1&filter_include_relocation=0&filter_job_category=engineering&filter_work_location_option=office&filter_job_type=new+college+graduate&filter_time_type=full+time",
-    fetchMode: "browser",
-    // Page may show zero New College Grad 2027 roles — wait for job cards or empty state.
-    browserWaitForSelector:
-      'a[href*="/careers/job/"], [class*="position"], [class*="no-result"], [class*="NoResult"]',
+    // Eightfold PCSX (same filters as the careers UI). Browser not required.
+    // Human UI: https://jobs.nvidia.com/careers?…&filter_job_type=new+college+graduate&…
+    // Titles today are "New College Grad 2026"; keep a 2027 needle for the next cycle.
+    url: "https://jobs.nvidia.com/api/pcsx/search?domain=nvidia.com&query=&location=United+States&start=0&num=20&sort_by=timestamp&filter_include_remote=1&filter_include_relocation=0&filter_job_category=engineering&filter_job_type=new+college+graduate&filter_time_type=full+time",
+    fetchMode: "html",
     matchMode: "all_jobs",
-    // Eightfold: /careers/job/<pid>
+    // Detail: /careers/job/<pid>
     jobPathPattern: String.raw`/careers/job/\d+`,
-    titleIncludes: ["New College Grad 2027"],
+    jobUrlTemplate: "https://jobs.nvidia.com/careers/job/{id}",
+    fetchStartOffsets: [0, 20],
+    titleIncludes: ["New College Grad 2026", "New College Grad 2027"],
+    titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {
     id: "snap",

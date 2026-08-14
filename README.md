@@ -1,6 +1,6 @@
 # Redeye — New Grad SWE Career Page Tracker
 
-Cloudflare Worker that polls big-tech career pages every **10 minutes** (rotating batches of 20 companies per tick on Workers Free), detects **new grad SWE** roles, dedupes them in **KV**, and notifies you on **Discord**.
+Cloudflare Worker that polls big-tech career pages every **5 minutes** (rotating batches of 20 companies per tick on Workers Free), detects **new grad SWE** roles, dedupes them in **KV**, and notifies you on **Discord**.
 
 ## Setup
 
@@ -51,7 +51,7 @@ npm run dev
 npm run deploy
 ```
 
-Cron `*/10 * * * *` runs on UTC in production. Each tick polls the next **20** companies (KV cursor) so Free-plan **50 external subrequests**/invocation are not exceeded; full coverage ≈ every 30 minutes. The cursor advances after each company so a killed tick does not freeze rotation.
+Cron `*/5 * * * *` runs on UTC in production. Each tick polls **20** companies chosen from the current 5-minute time slot (no KV cursor). Full coverage ≈ every 15 minutes.
 
 ## Companies
 
@@ -105,7 +105,7 @@ Configured in [`src/companies.ts`](src/companies.ts).
 - **Meta** — newest-first FT search (MPK/NYC/Bellevue); `browser` + `all_jobs` + title must include `University Grad`
 - **Apple** — Fresh Graduates (General) + US SWE/ML teams; `html` + `all_jobs` (`/details/<id>/<slug>`)
 - **Google** — Early + US + Bachelor's + Campus query; `html` + `all_jobs` + title must include `Campus`
-- **NVIDIA** — new college grad engineering (US); `browser` + `all_jobs` + title must include `New College Grad 2027`
+- **NVIDIA** — new college grad engineering (US); Eightfold PCSX JSON + `all_jobs` + title `New College Grad 2026`/`2027`
 
 Add more companies the same way, then redeploy / restart `npm run dev`.
 
@@ -119,9 +119,11 @@ Add more companies the same way, then redeploy / restart `npm run dev`.
 
 **First successful poll** for a company seeds current matches into KV **without** Discord alerts. Later polls only notify on new job ids. Zero open roles is fine (bootstrap with an empty set).
 
-**Browser Run budget:** Workers Free includes ~10 browser-minutes/day. Redeye runs at most **one** `browser` company per cron tick, at most every **2 hours**, and cools down after 429s. Prefer JSON APIs over `browser` when possible.
+**Browser Run budget:** Workers Free includes ~10 browser-minutes/day. Redeye runs at most **one** `browser` company per cron tick, at most every **60 minutes**, and cools down after 429s. Prefer JSON APIs over `browser` when possible.
 
 **Subrequest budget:** Workers Free allows 50 external `fetch`es per invocation. Polling all ~47 boards in one cron often aborted mid-run (Last run froze). Rotation keeps each tick small enough to finish and update status.
+
+**KV write budget:** Workers Free allows **1000 KV puts/day** (resets 00:00 UTC). Quiet ticks write nothing. Status rows rewrite only on change; last-run only when new jobs are found; rotation does not use a KV cursor. New job ids still get a put each.
 
 ## Status monitor
 

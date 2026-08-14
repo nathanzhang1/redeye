@@ -9,7 +9,7 @@
     "head_sampling_rate": 1
   },
   "triggers": {
-    "crons": ["*/10 * * * *"]
+    "crons": ["*/5 * * * *"]
   },
   "vars": {
     "DISCORD_USER_ID": "444017517003014144"

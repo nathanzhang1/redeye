@@ -1,6 +1,10 @@
 import { COMPANIES, type Company } from "./companies";
-import { COMPANIES_PER_BATCH, getControlState } from "./control";
-import { isBootstrapped } from "./seen";
+import {
+  COMPANIES_PER_BATCH,
+  CRON_INTERVAL_MS,
+  getControlState,
+} from "./control";
+import { BROWSER_MIN_INTERVAL_MS, isBootstrapped } from "./seen";
 
 export type CompanyCheckDetail = {
   companyId: string;
@@ -21,8 +25,15 @@ export type CompanyRunStatus = {
   notified: number;
   error?: string;
   checkedAt: string | null;
+  lastPolledAt: string | null;
+  pollStale: boolean;
   bootstrapped: boolean;
   paused: boolean;
+};
+
+export type PollLedger = {
+  lastTickAt: string;
+  lastPolled: Record<string, string>;
 };
 
 export type LastRunRecord = {
@@ -40,6 +51,8 @@ export type TrackerStatus = {
   globalPaused: boolean;
   lastRunAt: string | null;
   lastRun: LastRunRecord | null;
+  lastTickAt: string | null;
+  tickStale: boolean;
   companies: CompanyRunStatus[];
 };
 
@@ -48,6 +61,62 @@ function companyStatusKey(companyId: string): string {
 }
 
 const LAST_RUN_KEY = "status:last_run";
+const POLL_LEDGER_KEY = "status:poll_ledger";
+
+/** Cron is every 5 minutes; one missed tick is still healthy. */
+export const TICK_STALE_MS = 8 * 60 * 1000;
+
+export function companyPollStaleMs(company: Company): number {
+  if ((company.fetchMode ?? "html") === "browser") {
+    return BROWSER_MIN_INTERVAL_MS + CRON_INTERVAL_MS;
+  }
+  const ticksPerLoop = Math.max(
+    1,
+    Math.ceil(COMPANIES.length / COMPANIES_PER_BATCH),
+  );
+  return ticksPerLoop * CRON_INTERVAL_MS + CRON_INTERVAL_MS;
+}
+
+function isTimestampStale(iso: string | null, maxAgeMs: number): boolean {
+  if (!iso) return true;
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return true;
+  return Date.now() - at > maxAgeMs;
+}
+
+async function loadPollLedger(kv: KVNamespace): Promise<PollLedger> {
+  const raw = await kv.get(POLL_LEDGER_KEY);
+  if (!raw) return { lastTickAt: "", lastPolled: {} };
+  try {
+    const parsed = JSON.parse(raw) as Partial<PollLedger>;
+    return {
+      lastTickAt: typeof parsed.lastTickAt === "string" ? parsed.lastTickAt : "",
+      lastPolled:
+        parsed.lastPolled && typeof parsed.lastPolled === "object"
+          ? parsed.lastPolled
+          : {},
+    };
+  } catch {
+    return { lastTickAt: "", lastPolled: {} };
+  }
+}
+
+/** One KV put per tick: cron heartbeat + last-polled map for every company. */
+export async function recordPollTick(
+  kv: KVNamespace,
+  polledCompanyIds: string[],
+): Promise<void> {
+  const now = new Date().toISOString();
+  const existing = await loadPollLedger(kv);
+  const lastPolled = { ...existing.lastPolled };
+  for (const id of polledCompanyIds) {
+    lastPolled[id] = now;
+  }
+  await kv.put(
+    POLL_LEDGER_KEY,
+    JSON.stringify({ lastTickAt: now, lastPolled } satisfies PollLedger),
+  );
+}
 
 export async function saveRunStatus(
   kv: KVNamespace,
@@ -66,6 +135,28 @@ export async function saveRunStatus(
     error: detail.error,
     checkedAt: new Date().toISOString(),
   };
+  // Workers Free allows 1000 KV writes/day. Skip no-op status rewrites.
+  const existingRaw = await kv.get(companyStatusKey(company.id));
+  if (existingRaw) {
+    try {
+      const existing = JSON.parse(existingRaw) as {
+        status?: string;
+        matched?: number;
+        notified?: number;
+        error?: string;
+      };
+      if (
+        existing.status === record.status &&
+        existing.matched === record.matched &&
+        existing.notified === record.notified &&
+        (existing.error ?? "") === (record.error ?? "")
+      ) {
+        return;
+      }
+    } catch {
+      // rewrite if the stored row is corrupt
+    }
+  }
   await kv.put(companyStatusKey(company.id), JSON.stringify(record));
 }
 
@@ -93,20 +184,28 @@ export async function saveLastRun(
 }
 
 export async function getTrackerStatus(kv: KVNamespace): Promise<TrackerStatus> {
-  const [lastRunRaw, control] = await Promise.all([
+  const [lastRunRaw, control, ledger] = await Promise.all([
     kv.get(LAST_RUN_KEY),
     getControlState(kv),
+    loadPollLedger(kv),
   ]);
   const lastRun = lastRunRaw
     ? (JSON.parse(lastRunRaw) as LastRunRecord)
     : null;
   const pausedIds = new Set(control.pausedCompanyIds);
+  const lastTickAt = ledger.lastTickAt || null;
+  const tickStale = isTimestampStale(lastTickAt, TICK_STALE_MS);
 
   const companies: CompanyRunStatus[] = await Promise.all(
     COMPANIES.map(async (company) => {
       const raw = await kv.get(companyStatusKey(company.id));
       const bootstrapped = await isBootstrapped(kv, company.id);
       const paused = pausedIds.has(company.id);
+      const lastPolledAt = ledger.lastPolled[company.id] ?? null;
+      const pollStale =
+        !paused &&
+        !control.globalPaused &&
+        isTimestampStale(lastPolledAt, companyPollStaleMs(company));
       if (!raw) {
         return {
           companyId: company.id,
@@ -118,23 +217,27 @@ export async function getTrackerStatus(kv: KVNamespace): Promise<TrackerStatus> 
           matched: 0,
           notified: 0,
           checkedAt: null,
+          lastPolledAt,
+          pollStale,
           bootstrapped,
           paused,
         };
       }
       const saved = JSON.parse(raw) as Omit<
         CompanyRunStatus,
-        "bootstrapped" | "paused"
+        "bootstrapped" | "paused" | "lastPolledAt" | "pollStale"
       >;
-      return { ...saved, bootstrapped, paused };
+      return { ...saved, lastPolledAt, pollStale, bootstrapped, paused };
     }),
   );
 
   return {
-    cron: "*/10 * * * *",
+    cron: "*/5 * * * *",
     globalPaused: control.globalPaused,
     lastRunAt: lastRun?.checkedAt ?? null,
     lastRun,
+    lastTickAt,
+    tickStale,
     companies,
   };
 }
@@ -164,8 +267,8 @@ export function renderStatusHtml(
 
   const rows = sorted
     .map((c) => {
-      const checked = c.checkedAt
-        ? escapeHtml(formatPacificTime(c.checkedAt))
+      const polled = c.lastPolledAt
+        ? escapeHtml(formatPacificTime(c.lastPolledAt))
         : "<em>never</em>";
       const err = c.error
         ? `<div class="err" title="${escapeAttr(c.error)}">${escapeHtml(c.error)}</div>`
@@ -205,14 +308,15 @@ export function renderStatusHtml(
         data-attention="${attention}"
         data-healthy="${healthy}"
         data-rank="${statusSortRank(c)}"
-        data-checked="${escapeAttr(c.checkedAt ?? "")}"
+        data-checked="${escapeAttr(c.lastPolledAt ?? "")}"
         data-matched="${c.matched}">
         <td class="col-company"><strong>${escapeHtml(c.name)}</strong><br><code>${escapeHtml(c.companyId)}</code></td>
         <td class="col-status">${pauseBadge}<span class="badge ${c.status}">${c.status}</span></td>
-        <td class="col-checked">${checked}</td>
+        <td class="col-checked${c.pollStale ? " stale" : ""}">${polled}${
+          c.pollStale ? `<div class="err">poll stale</div>` : ""
+        }</td>
         <td class="col-num">${c.matched}</td>
         <td class="col-num">${c.notified}</td>
-        <td class="col-num">${c.bootstrapped ? "yes" : "no"}</td>
         <td class="col-config"><span class="mode">${escapeHtml(c.fetchMode)} / ${escapeHtml(c.matchMode)}</span>${err}<br><a href="${escapeAttr(c.url)}" target="_blank" rel="noopener">open page</a></td>
         <td class="col-control actions">${runBtn}${pauseBtn}</td>
       </tr>`;
@@ -248,7 +352,7 @@ export function renderStatusHtml(
       (c) =>
         `<li><strong>${escapeHtml(c.name)}</strong> <span class="badge ${c.status}">${c.status}</span>${
           c.paused ? ` <span class="badge paused">paused</span>` : ""
-        }${c.error ? ` — <span class="attn-err">${escapeHtml(truncate(c.error, 90))}</span>` : ""}</li>`,
+        }${c.pollStale ? ` <span class="badge failed">poll stale</span>` : ""}${c.error ? ` — <span class="attn-err">${escapeHtml(truncate(c.error, 90))}</span>` : ""}</li>`,
     )
     .join("");
 
@@ -301,6 +405,7 @@ export function renderStatusHtml(
     th, td { text-align: left; padding: .55rem .45rem; border-bottom: 1px solid #e5e7eb; vertical-align: top; overflow: hidden; height: 100%; }
     th { font-size: .7rem; text-transform: uppercase; letter-spacing: .03em; color: #6b7280; line-height: 1.25; overflow-wrap: anywhere; height: auto; }
     td.col-checked { font-size: .8rem; overflow-wrap: anywhere; }
+    td.col-checked.stale { color: var(--fail); }
     td.col-config { overflow-wrap: anywhere; word-break: break-word; }
     td.col-control { overflow: hidden; vertical-align: top; }
     .badge { display: inline-block; padding: .1rem .45rem; border-radius: 999px; font-size: .75rem; font-weight: 600; color: #fff; max-width: 100%; }
@@ -335,17 +440,24 @@ export function renderStatusHtml(
   <h1>Redeye status</h1>
   <div class="meta">
     Cron: <code>${escapeHtml(status.cron)}</code><br />
-    Last run: <strong>${status.lastRunAt ? escapeHtml(formatPacificTime(status.lastRunAt)) : "never"}</strong>
+    Last tick: <strong>${status.lastTickAt ? escapeHtml(formatPacificTime(status.lastTickAt)) : "never"}</strong>${
+      status.tickStale ? ` <span class="badge failed">stale</span>` : ""
+    }
     ${
       status.lastRun
-        ? ` · batch ${status.lastRun.companies}/${status.companies.length} · new ${status.lastRun.newJobs} · failures ${status.lastRun.failures} · skipped ${status.lastRun.skipped ?? 0}`
+        ? `<br />Last new jobs: ${escapeHtml(formatPacificTime(status.lastRun.checkedAt))} · new ${status.lastRun.newJobs} · failures ${status.lastRun.failures}`
         : ""
     }
-    <br />Cron polls ${COMPANIES_PER_BATCH} companies per tick (rotation) so Free-plan subrequest limits don't abort runs.
+    <br />One KV write per tick records who was actually fetched. Status is last outcome; last polled is last real fetch.
   </div>
   ${
+    status.tickStale
+      ? `<div class="banner run-fail"><strong>Cron heartbeat is stale</strong> — no completed tick in the last 8 minutes. Last polled times will not move until a tick writes the ledger.</div>`
+      : ""
+  }
+  ${
     status.globalPaused
-      ? `<div class="banner paused"><strong>Global pause is on</strong> — cron and <strong>Run batch</strong> skip. Per-company <strong>Run</strong> still polls that board. Last-check rows are preserved.</div>`
+      ? `<div class="banner paused"><strong>Global pause is on</strong> — cron and <strong>Run batch</strong> skip. Per-company <strong>Run</strong> still polls that board.</div>`
       : ""
   }
   ${flashBanner}
@@ -382,7 +494,7 @@ export function renderStatusHtml(
     <select id="sort">
       <option value="attention" selected>Attention first</option>
       <option value="name">Name A–Z</option>
-      <option value="checked">Last check (newest)</option>
+      <option value="checked">Last polled (newest)</option>
       <option value="matched">Matched (high→low)</option>
     </select>
     <span class="shown" id="shown-count"></span>
@@ -395,7 +507,6 @@ export function renderStatusHtml(
       <col class="col-checked" />
       <col class="col-num" />
       <col class="col-num" />
-      <col class="col-num" />
       <col class="col-config" />
       <col class="col-control" />
     </colgroup>
@@ -403,16 +514,15 @@ export function renderStatusHtml(
       <tr>
         <th>Company</th>
         <th>Status</th>
-        <th>Last check</th>
+        <th title="Last time this company was actually fetched">Last polled</th>
         <th title="Matched">Match</th>
         <th title="Notified">Notify</th>
-        <th title="Bootstrapped">Boot</th>
         <th>Config</th>
         <th>Control</th>
       </tr>
     </thead>
     <tbody id="company-rows">
-      ${rows || `<tr><td colspan="8">No companies configured</td></tr>`}
+      ${rows || `<tr><td colspan="7">No companies configured</td></tr>`}
     </tbody>
   </table>
   </div>
@@ -504,6 +614,7 @@ export function renderStatusHtml(
 
 function needsAttention(c: CompanyRunStatus): boolean {
   return (
+    c.pollStale ||
     c.status === "failed" ||
     c.status === "skipped" ||
     c.status === "never" ||
@@ -514,6 +625,7 @@ function needsAttention(c: CompanyRunStatus): boolean {
 function isHealthy(c: CompanyRunStatus): boolean {
   return (
     !c.paused &&
+    !c.pollStale &&
     c.bootstrapped &&
     (c.status === "ok" || c.status === "seeded")
   );
@@ -522,12 +634,13 @@ function isHealthy(c: CompanyRunStatus): boolean {
 function statusSortRank(c: CompanyRunStatus): number {
   // Lower = higher priority in "attention first"
   if (c.status === "failed") return 0;
-  if (c.status === "skipped") return 1;
-  if (c.status === "never") return 2;
-  if (!c.bootstrapped) return 3;
-  if (c.paused) return 4;
-  if (c.status === "seeded") return 5;
-  return 6;
+  if (c.pollStale) return 1;
+  if (c.status === "skipped") return 2;
+  if (c.status === "never") return 3;
+  if (!c.bootstrapped) return 4;
+  if (c.paused) return 5;
+  if (c.status === "seeded") return 6;
+  return 7;
 }
 
 function compareCompaniesForStatus(
