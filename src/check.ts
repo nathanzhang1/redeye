@@ -3,7 +3,7 @@ import {
   fetchRenderedHtml,
 } from "./browser";
 import { COMPANIES, type Company } from "./companies";
-import { notifyNewJobs, notifyScrapeFailure } from "./discord";
+import { notifyNewJobs } from "./discord";
 import { extractJobs, fetchCareerPage, type JobListing } from "./parse";
 import {
   COMPANIES_PER_BATCH,
@@ -23,7 +23,6 @@ import {
   markJobSeen,
   seedJobs,
   setBrowserCooldown,
-  shouldAlertFailure,
 } from "./seen";
 import { recordPollTick, saveLastRun, saveRunStatus } from "./status";
 
@@ -458,34 +457,6 @@ async function checkCompany(
 
     const isRateLimit =
       error instanceof BrowserRateLimitError || message.includes("429");
-
-    if (env.DISCORD_WEBHOOK_URL) {
-      // Don't Discord-spam on expected free-tier / LinkedIn 429s.
-      if (!isRateLimit) {
-        const alert = await shouldAlertFailure(env.SEEN_JOBS, company.id);
-        if (alert) {
-          try {
-            await notifyScrapeFailure(
-              env.DISCORD_WEBHOOK_URL,
-              company.name,
-              message,
-              env.DISCORD_USER_ID,
-            );
-          } catch (notifyError) {
-            console.log(
-              JSON.stringify({
-                event: "failure_notify_failed",
-                companyId: company.id,
-                error:
-                  notifyError instanceof Error
-                    ? notifyError.message
-                    : String(notifyError),
-              }),
-            );
-          }
-        }
-      }
-    }
 
     // Datacenter IPs often 429 LinkedIn guest search / Jina reader — treat as skip.
     if (

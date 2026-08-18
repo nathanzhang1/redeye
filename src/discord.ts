@@ -40,32 +40,6 @@ export async function notifyNewJobs(
   }
 }
 
-export async function notifyScrapeFailure(
-  webhookUrl: string,
-  companyName: string,
-  errorMessage: string,
-  mentionUserId?: string,
-): Promise<void> {
-  if (mentionUserId) {
-    await postWebhook(webhookUrl, {
-      content: `<@${mentionUserId}> scrape failed for **${companyName}**`,
-      allowed_mentions: { users: [mentionUserId] },
-    });
-  }
-
-  await postWebhook(webhookUrl, {
-    embeds: [
-      {
-        title: `Scrape failed — ${companyName}`,
-        description: truncate(errorMessage, 1000),
-        color: 0xf59e0b,
-        timestamp: new Date().toISOString(),
-      },
-    ],
-    allowed_mentions: { parse: [] },
-  });
-}
-
 async function postWebhook(
   webhookUrl: string,
   body: Record<string, unknown>,

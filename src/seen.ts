@@ -14,10 +14,6 @@ function bootstrapKey(companyId: string): string {
   return `bootstrap:${companyId}`;
 }
 
-function failKey(companyId: string): string {
-  return `fail:${companyId}`;
-}
-
 export async function isBootstrapped(
   kv: KVNamespace,
   companyId: string,
@@ -64,8 +60,6 @@ export async function seedJobs(
   await markBootstrapped(kv, companyId);
 }
 
-const FAIL_ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
-
 /**
  * Workers Free ≈ 10 browser-minutes/day. Polling Meta+NVIDIA every 5 minutes
  * burns the budget immediately. Space browser companies out.
@@ -79,22 +73,6 @@ function browserLastKey(companyId: string): string {
 }
 
 const BROWSER_COOLDOWN_KEY = "browser:cooldown_until";
-
-/** Returns true if a failure alert should be sent (and records the send). */
-export async function shouldAlertFailure(
-  kv: KVNamespace,
-  companyId: string,
-): Promise<boolean> {
-  const last = await kv.get(failKey(companyId));
-  if (last) {
-    const elapsed = Date.now() - Date.parse(last);
-    if (!Number.isNaN(elapsed) && elapsed < FAIL_ALERT_COOLDOWN_MS) {
-      return false;
-    }
-  }
-  await kv.put(failKey(companyId), new Date().toISOString());
-  return true;
-}
 
 export async function getBrowserLastAttempt(
   kv: KVNamespace,

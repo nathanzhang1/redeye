@@ -296,7 +296,6 @@ Live logs show `cron_dispatch_ok`, `company_ok`, `company_failed`, and `check_co
 |-----|---------|
 | `bootstrap:{companyId}` | First seed finished |
 | `job:{companyId}:{jobId}` | Already seen |
-| `fail:{companyId}` | Failure-alert cooldown (6h) |
 | `status:company:{companyId}` | Last outcome row |
 | `status:poll_shard:{n}` | Last-polled times for that cron shard |
 | `status:last_run` | Last tick that found new jobs |
