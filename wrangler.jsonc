@@ -24,9 +24,8 @@
       "service": "redeye"
     }
   ],
-  "vars": {
-    "DISCORD_USER_ID": "444017517003014144"
-  },
+  // Optional @mention on Discord alerts:
+  //   npx wrangler secret put DISCORD_USER_ID
   // Browser Run (Browser Rendering) — required for JS-heavy career pages like Meta.
   // Local: use `npm run dev` which passes --remote (quickAction needs remote mode).
   "browser": {

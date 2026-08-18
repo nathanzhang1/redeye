@@ -1,6 +1,11 @@
 node_modules/
 .wrangler/
+.wrangler-dist/
 .dev.vars
 .DS_Store
 dist/
 *.log
+redeye_webhook.txt
+*webhook*.txt
+.env
+.env.*
