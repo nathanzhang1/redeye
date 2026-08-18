@@ -1,4 +1,5 @@
 interface Env {
+  SELF: Fetcher;
   SEEN_JOBS: KVNamespace;
   BROWSER: {
     quickAction(

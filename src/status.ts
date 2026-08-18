@@ -2,6 +2,8 @@ import { COMPANIES, type Company } from "./companies";
 import {
   COMPANIES_PER_BATCH,
   CRON_INTERVAL_MS,
+  CRON_SHARDS,
+  HTTP_SHARD_COUNT,
   getControlState,
 } from "./control";
 import { BROWSER_MIN_INTERVAL_MS, isBootstrapped } from "./seen";
@@ -63,6 +65,10 @@ function companyStatusKey(companyId: string): string {
 const LAST_RUN_KEY = "status:last_run";
 const POLL_LEDGER_KEY = "status:poll_ledger";
 
+function pollShardKey(shardId: string | number): string {
+  return `status:poll_shard:${shardId}`;
+}
+
 /** Cron is every 5 minutes; one missed tick is still healthy. */
 export const TICK_STALE_MS = 8 * 60 * 1000;
 
@@ -84,8 +90,7 @@ function isTimestampStale(iso: string | null, maxAgeMs: number): boolean {
   return Date.now() - at > maxAgeMs;
 }
 
-async function loadPollLedger(kv: KVNamespace): Promise<PollLedger> {
-  const raw = await kv.get(POLL_LEDGER_KEY);
+function parsePollLedger(raw: string | null): PollLedger {
   if (!raw) return { lastTickAt: "", lastPolled: {} };
   try {
     const parsed = JSON.parse(raw) as Partial<PollLedger>;
@@ -101,19 +106,43 @@ async function loadPollLedger(kv: KVNamespace): Promise<PollLedger> {
   }
 }
 
-/** One KV put per tick: cron heartbeat + last-polled map for every company. */
+function mergePollLedgers(parts: PollLedger[]): PollLedger {
+  const lastPolled: Record<string, string> = {};
+  let lastTickAt = "";
+  for (const part of parts) {
+    if (part.lastTickAt > lastTickAt) lastTickAt = part.lastTickAt;
+    for (const [id, at] of Object.entries(part.lastPolled)) {
+      if (!lastPolled[id] || at > lastPolled[id]) lastPolled[id] = at;
+    }
+  }
+  return { lastTickAt, lastPolled };
+}
+
+async function loadPollLedger(kv: KVNamespace): Promise<PollLedger> {
+  const keys = [
+    POLL_LEDGER_KEY,
+    pollShardKey("manual"),
+    ...Array.from({ length: HTTP_SHARD_COUNT }, (_, i) => pollShardKey(i)),
+  ];
+  const raws = await Promise.all(keys.map((key) => kv.get(key)));
+  return mergePollLedgers(raws.map(parsePollLedger));
+}
+
+/** Per-shard snapshot (no cross-shard read/modify/write). */
 export async function recordPollTick(
   kv: KVNamespace,
   polledCompanyIds: string[],
+  shardId: string | number = "manual",
 ): Promise<void> {
   const now = new Date().toISOString();
-  const existing = await loadPollLedger(kv);
+  const key = pollShardKey(shardId);
+  const existing = parsePollLedger(await kv.get(key));
   const lastPolled = { ...existing.lastPolled };
   for (const id of polledCompanyIds) {
     lastPolled[id] = now;
   }
   await kv.put(
-    POLL_LEDGER_KEY,
+    key,
     JSON.stringify({ lastTickAt: now, lastPolled } satisfies PollLedger),
   );
 }
@@ -123,6 +152,29 @@ export async function saveRunStatus(
   company: Company,
   detail: CompanyCheckDetail,
 ): Promise<void> {
+  const existingRaw = await kv.get(companyStatusKey(company.id));
+  let existing: {
+    status?: string;
+    matched?: number;
+    notified?: number;
+    error?: string;
+  } | null = null;
+  if (existingRaw) {
+    try {
+      existing = JSON.parse(existingRaw) as {
+        status?: string;
+        matched?: number;
+        notified?: number;
+        error?: string;
+      };
+    } catch {
+      existing = null;
+    }
+  }
+
+  // Notify is lifetime (this poll's fresh jobs + stored total). A quiet poll
+  // with notified=0 must not reset the column — that also avoids a KV write.
+  const notified = (existing?.notified ?? 0) + (detail.notified ?? 0);
   const record = {
     companyId: company.id,
     name: company.name,
@@ -131,31 +183,19 @@ export async function saveRunStatus(
     matchMode: company.matchMode ?? "keywords",
     status: detail.status,
     matched: detail.matched,
-    notified: detail.notified,
+    notified,
     error: detail.error,
     checkedAt: new Date().toISOString(),
   };
-  // Workers Free allows 1000 KV writes/day. Skip no-op status rewrites.
-  const existingRaw = await kv.get(companyStatusKey(company.id));
-  if (existingRaw) {
-    try {
-      const existing = JSON.parse(existingRaw) as {
-        status?: string;
-        matched?: number;
-        notified?: number;
-        error?: string;
-      };
-      if (
-        existing.status === record.status &&
-        existing.matched === record.matched &&
-        existing.notified === record.notified &&
-        (existing.error ?? "") === (record.error ?? "")
-      ) {
-        return;
-      }
-    } catch {
-      // rewrite if the stored row is corrupt
-    }
+
+  if (
+    existing &&
+    existing.status === record.status &&
+    existing.matched === record.matched &&
+    existing.notified === record.notified &&
+    (existing.error ?? "") === (record.error ?? "")
+  ) {
+    return;
   }
   await kv.put(companyStatusKey(company.id), JSON.stringify(record));
 }
@@ -232,7 +272,7 @@ export async function getTrackerStatus(kv: KVNamespace): Promise<TrackerStatus> 
   );
 
   return {
-    cron: "*/5 * * * *",
+    cron: CRON_SHARDS.join(" · "),
     globalPaused: control.globalPaused,
     lastRunAt: lastRun?.checkedAt ?? null,
     lastRun,
@@ -448,7 +488,7 @@ export function renderStatusHtml(
         ? `<br />Last new jobs: ${escapeHtml(formatPacificTime(status.lastRun.checkedAt))} · new ${status.lastRun.newJobs} · failures ${status.lastRun.failures}`
         : ""
     }
-    <br />One KV write per tick records who was actually fetched. Status is last outcome; last polled is last real fetch.
+    <br />Four staggered crons each poll ${Math.ceil(COMPANIES_PER_BATCH / HTTP_SHARD_COUNT)} companies via HTTP (no shared parent). Full loop ≈ ${Math.ceil(status.companies.length / COMPANIES_PER_BATCH) * 5} minutes.
   </div>
   ${
     status.tickStale
@@ -516,7 +556,7 @@ export function renderStatusHtml(
         <th>Status</th>
         <th title="Last time this company was actually fetched">Last polled</th>
         <th title="Matched">Match</th>
-        <th title="Notified">Notify</th>
+        <th title="Lifetime Discord notifications for this company">Notify</th>
         <th>Config</th>
         <th>Control</th>
       </tr>

@@ -1,8 +1,19 @@
 const GLOBAL_PAUSED_KEY = "control:global_paused";
 const PAUSED_COMPANIES_KEY = "control:paused_companies";
 
-/** Companies per cron/batch tick. Rotation is time-based (no KV cursor). */
+/**
+ * Companies per 5-minute window. Four staggered crons each dispatch one
+ * HTTP shard so a hung board cannot block the next tick (the old single
+ * cron awaited all shards sequentially and overran the 5-minute schedule).
+ */
 export const COMPANIES_PER_BATCH = 20;
+export const CRON_SHARDS = [
+  "0,5,10,15,20,25,30,35,40,45,50,55 * * * *",
+  "1,6,11,16,21,26,31,36,41,46,51,56 * * * *",
+  "2,7,12,17,22,27,32,37,42,47,52,57 * * * *",
+  "3,8,13,18,23,28,33,38,43,48,53,58 * * * *",
+] as const;
+export const HTTP_SHARD_COUNT = CRON_SHARDS.length;
 export const CRON_INTERVAL_MS = 5 * 60 * 1000;
 
 export type ControlState = {

@@ -48,6 +48,11 @@ export type CheckAllOptions = {
    * the current 5-minute time slot (no KV cursor).
    */
   rotate?: boolean;
+  /** 0-based slice of the rotating batch (cron HTTP shards). */
+  shard?: number;
+  shardCount?: number;
+  /** When true, caller (cron) writes the poll ledger. */
+  skipLedger?: boolean;
 };
 
 export async function checkAll(
@@ -55,6 +60,7 @@ export async function checkAll(
   options: CheckAllOptions = {},
 ): Promise<CheckSummary> {
   const rotate = options.rotate ?? false;
+  const skipLedger = options.skipLedger ?? false;
   const summary: CheckSummary = {
     companies: 0,
     newJobs: 0,
@@ -77,7 +83,9 @@ export async function checkAll(
       summary.skipped += 1;
     }
     // Do not overwrite per-company last-check rows — pause is control state.
-    await recordPollTickSafe(env.SEEN_JOBS, []);
+    if (!skipLedger) {
+      await recordPollTickSafe(env.SEEN_JOBS, [], options.shard ?? "manual");
+    }
     console.log(
       JSON.stringify({
         event: "check_complete",
@@ -89,7 +97,7 @@ export async function checkAll(
   }
 
   const pausedCompanies = await getPausedCompanyIds(env.SEEN_JOBS);
-  const { batch, cursorStart } = selectCompanyBatch(rotate);
+  const { batch, cursorStart } = selectCompanyBatch(rotate, options);
   summary.companies = batch.length;
 
   const browserPlan = await planBrowserCompanies(
@@ -183,10 +191,16 @@ export async function checkAll(
       if (abortedSubrequests) break;
     }
   } finally {
-    const polledIds = summary.details
-      .filter((detail) => detail.status !== "skipped")
-      .map((detail) => detail.companyId);
-    await recordPollTickSafe(env.SEEN_JOBS, polledIds);
+    if (!skipLedger) {
+      const polledIds = summary.details
+        .filter((detail) => detail.status !== "skipped")
+        .map((detail) => detail.companyId);
+      await recordPollTickSafe(
+        env.SEEN_JOBS,
+        polledIds,
+        options.shard ?? "manual",
+      );
+    }
     // Last-run row only when something happened — not every quiet tick.
     if (summary.newJobs > 0 || summary.seeded > 0) {
       await saveLastRun(env.SEEN_JOBS, summary);
@@ -208,9 +222,10 @@ export async function checkAll(
 async function recordPollTickSafe(
   kv: KVNamespace,
   polledCompanyIds: string[],
+  shardId: string | number = "manual",
 ): Promise<void> {
   try {
-    await recordPollTick(kv, polledCompanyIds);
+    await recordPollTick(kv, polledCompanyIds, shardId);
   } catch (error) {
     console.log(
       JSON.stringify({
@@ -221,7 +236,10 @@ async function recordPollTickSafe(
   }
 }
 
-function selectCompanyBatch(rotate: boolean): {
+function selectCompanyBatch(
+  rotate: boolean,
+  options: CheckAllOptions = {},
+): {
   batch: Company[];
   cursorStart: number;
 } {
@@ -237,11 +255,21 @@ function selectCompanyBatch(rotate: boolean): {
   const tick = Math.floor(Date.now() / CRON_INTERVAL_MS);
   const cursorStart = (tick * COMPANIES_PER_BATCH) % COMPANIES.length;
   const size = Math.min(COMPANIES_PER_BATCH, COMPANIES.length);
-  const batch: Company[] = [];
+  const full: Company[] = [];
   for (let i = 0; i < size; i++) {
-    batch.push(COMPANIES[(cursorStart + i) % COMPANIES.length]!);
+    full.push(COMPANIES[(cursorStart + i) % COMPANIES.length]!);
   }
-  return { batch, cursorStart };
+  const shardCount = options.shardCount ?? 0;
+  const shard = options.shard ?? 0;
+  if (shardCount > 1) {
+    const shardSize = Math.ceil(full.length / shardCount);
+    const start = shard * shardSize;
+    return {
+      batch: full.slice(start, start + shardSize),
+      cursorStart,
+    };
+  }
+  return { batch: full, cursorStart };
 }
 
 /**

@@ -1,20 +1,48 @@
 import { fetchRenderedHtml } from "./browser";
 import { checkAll, checkOne } from "./check";
 import { COMPANIES } from "./companies";
-import { setCompanyPaused, setGlobalPaused } from "./control";
+import {
+  CRON_SHARDS,
+  HTTP_SHARD_COUNT,
+  setCompanyPaused,
+  setGlobalPaused,
+} from "./control";
 import { notifyNewJobs } from "./discord";
 import { extractJobs } from "./parse";
 import { getTrackerStatus, renderStatusHtml } from "./status";
 
 export default {
   async scheduled(
-    _controller: ScheduledController,
+    controller: ScheduledController,
     env: Env,
     _ctx: ExecutionContext,
   ): Promise<void> {
-    // Rotate a small batch each tick — full 47-company polls exceed Free
-    // subrequest limits and abort before lastRun is saved.
-    await checkAll(env, { rotate: true });
+    // Each cron expression owns one shard. A hung fetch cannot block the
+    // other shards or the next 5-minute window.
+    const found = CRON_SHARDS.findIndex((expr) => expr === controller.cron);
+    const shard = found >= 0 ? found : 0;
+    const response = await env.SELF.fetch(
+      new Request(
+        `https://redeye.internal/run?shard=${shard}&shards=${HTTP_SHARD_COUNT}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${env.RUN_SECRET}`,
+            "X-Redeye-Cron": "1",
+          },
+        },
+      ),
+    );
+    const body = await response.text();
+    console.log(
+      JSON.stringify({
+        event: response.ok ? "cron_dispatch_ok" : "cron_dispatch_failed",
+        cron: controller.cron,
+        shard,
+        status: response.status,
+        detail: response.ok ? undefined : body.slice(0, 300),
+      }),
+    );
   },
 
   async fetch(
@@ -189,19 +217,30 @@ export default {
 
       let companyId: string | undefined;
       let runAll = false;
+      let shard: number | undefined;
+      let shardCount: number | undefined;
+      let skipLedger = false;
       try {
         const opts = await readRunOptions(request, url);
         companyId = opts.companyId;
         runAll = opts.all;
+        shard = opts.shard;
+        shardCount = opts.shardCount;
+        skipLedger = opts.skipLedger;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return Response.json({ error: message }, { status: 400 });
       }
-      // Default (and dashboard button): same rotating batch as cron so Free
-      // subrequest limits don't abort the run. Pass all=1 / {"all":true} for every company.
+      // Default (and dashboard / cron dispatch): rotating batch.
+      // Pass all=1 / {"all":true} for every company.
       const summary = companyId
         ? await checkOne(env, companyId)
-        : await checkAll(env, { rotate: !runAll });
+        : await checkAll(env, {
+            rotate: !runAll,
+            shard,
+            shardCount,
+            skipLedger,
+          });
 
       const wantsHtml =
         (request.headers.get("Accept") ?? "").includes("text/html") ||
@@ -307,17 +346,44 @@ function statusPageToken(request: Request, url: URL): string | null {
   return null;
 }
 
+function parseShardParams(url: URL): {
+  shard?: number;
+  shardCount?: number;
+  skipLedger: boolean;
+} {
+  const shardRaw = url.searchParams.get("shard");
+  const shardsRaw = url.searchParams.get("shards");
+  const shard = shardRaw != null ? Number(shardRaw) : undefined;
+  const shardCount = shardsRaw != null ? Number(shardsRaw) : undefined;
+  return {
+    shard:
+      shard != null && Number.isInteger(shard) && shard >= 0 ? shard : undefined,
+    shardCount:
+      shardCount != null && Number.isInteger(shardCount) && shardCount > 1
+        ? shardCount
+        : undefined,
+    skipLedger: url.searchParams.get("ledger") === "0",
+  };
+}
+
 async function readRunOptions(
   request: Request,
   url: URL,
-): Promise<{ companyId?: string; all: boolean }> {
+): Promise<{
+  companyId?: string;
+  all: boolean;
+  shard?: number;
+  shardCount?: number;
+  skipLedger: boolean;
+}> {
   const allFromQuery = url.searchParams.get("all") === "1";
+  const shardOpts = parseShardParams(url);
   const fromQuery = url.searchParams.get("companyId")?.trim();
   if (fromQuery) {
     if (!COMPANIES.some((c) => c.id === fromQuery)) {
       throw new Error(`Unknown companyId: ${fromQuery}`);
     }
-    return { companyId: fromQuery, all: false };
+    return { companyId: fromQuery, all: false, ...shardOpts };
   }
 
   const contentType = request.headers.get("Content-Type") ?? "";
@@ -337,14 +403,14 @@ async function readRunOptions(
         if (!COMPANIES.some((c) => c.id === id)) {
           throw new Error(`Unknown companyId: ${id}`);
         }
-        return { companyId: id, all: false };
+        return { companyId: id, all: false, ...shardOpts };
       }
-      return { all };
+      return { all, ...shardOpts };
     } catch (error) {
       if (error instanceof Error && error.message.startsWith("Unknown")) {
         throw error;
       }
-      return { all: allFromQuery };
+      return { all: allFromQuery, ...shardOpts };
     }
   }
 
@@ -358,14 +424,14 @@ async function readRunOptions(
       allFromQuery ||
       String(form.get("all") ?? "") === "1" ||
       String(form.get("all") ?? "") === "true";
-    if (!id) return { all };
+    if (!id) return { all, ...shardOpts };
     if (!COMPANIES.some((c) => c.id === id)) {
       throw new Error(`Unknown companyId: ${id}`);
     }
-    return { companyId: id, all: false };
+    return { companyId: id, all: false, ...shardOpts };
   }
 
-  return { all: allFromQuery };
+  return { all: allFromQuery, ...shardOpts };
 }
 
 function parseRunFlash(

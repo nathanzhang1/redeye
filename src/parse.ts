@@ -14,7 +14,7 @@ export type JobListing = {
 const USER_AGENT =
   "Mozilla/5.0 (compatible; RedeyeJobTracker/1.0; +https://github.com/redeye)";
 
-const FETCH_TIMEOUT_MS = 30_000;
+const FETCH_TIMEOUT_MS = 12_000;
 // Ashby boards embed full job HTML and routinely exceed 2MB.
 const MAX_HTML_BYTES = 4_000_000;
 
