@@ -865,7 +865,6 @@ export const COMPANIES: Company[] = [
     name: "NVIDIA",
     // Eightfold PCSX (same filters as the careers UI). Browser not required.
     // Human UI: https://jobs.nvidia.com/careers?…&filter_job_type=new+college+graduate&…
-    // Titles today are "New College Grad 2026"; keep a 2027 needle for the next cycle.
     url: "https://jobs.nvidia.com/api/pcsx/search?domain=nvidia.com&query=&location=United+States&start=0&num=20&sort_by=timestamp&filter_include_remote=1&filter_include_relocation=0&filter_job_category=engineering&filter_job_type=new+college+graduate&filter_time_type=full+time",
     fetchMode: "html",
     matchMode: "all_jobs",
@@ -873,7 +872,7 @@ export const COMPANIES: Company[] = [
     jobPathPattern: String.raw`/careers/job/\d+`,
     jobUrlTemplate: "https://jobs.nvidia.com/careers/job/{id}",
     fetchStartOffsets: [0, 20],
-    titleIncludes: ["New College Grad 2026", "New College Grad 2027"],
+    titleIncludes: ["2027"],
     titleExcludes: ["Intern", "Internship", "Internships"],
   },
   {

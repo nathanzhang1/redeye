@@ -181,11 +181,11 @@ Cloudflare Free limits are tight. The schedule is built around them:
 | Limit | Free | How Redeye stays under it |
 |-------|------|---------------------------|
 | Cron CPU | 10 ms | Cron only `POST`s `/run` via the `SELF` binding |
-| External fetches | 50 / invocation | 20 companies per 5-minute window, split into **4 shards** |
+| External fetches | 50 / invocation | 20 companies per 5-minute window; each HTTP call polls **one** board |
 | KV writes | 1000 / day (reset 00:00 UTC) | Quiet polls skip status rewrites; last-run only on new jobs |
 | Browser time | ~10 min / day | One browser company / tick, 60-minute gap |
 
-Four **independent** crons fire on `:00`, `:01`, `:02`, `:03` (and every 5 minutes after). Each cron polls ~5 companies. A hung career page cannot block the other shards.
+Four **independent** crons fire on `:00`, `:01`, `:02`, `:03` (and every 5 minutes after). Each cron fetches its 5 companies as **one-company HTTP calls** so Free's 10ms CPU cap does not kill the scrape mid-run.
 
 If last-polled goes stale, check `/status` **Last tick** first. A fresh last-tick with old last-polled usually means a shard died mid-fetch, not that cron stopped.
 

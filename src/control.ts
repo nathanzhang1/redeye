@@ -2,11 +2,12 @@ const GLOBAL_PAUSED_KEY = "control:global_paused";
 const PAUSED_COMPANIES_KEY = "control:paused_companies";
 
 /**
- * Companies per 5-minute window. Four staggered crons each dispatch one
- * HTTP shard so a hung board cannot block the next tick (the old single
- * cron awaited all shards sequentially and overran the 5-minute schedule).
+ * Companies per 5-minute window. Four staggered crons each dispatch their
+ * slice as one-company HTTP calls (Free CPU is 10ms; 5-company shards were
+ * killed mid-run). Cron CPU stays near zero — it only awaits those fetches.
  */
 export const COMPANIES_PER_BATCH = 20;
+export const COMPANIES_PER_HTTP = 1;
 export const CRON_SHARDS = [
   "0,5,10,15,20,25,30,35,40,45,50,55 * * * *",
   "1,6,11,16,21,26,31,36,41,46,51,56 * * * *",
@@ -14,6 +15,8 @@ export const CRON_SHARDS = [
   "3,8,13,18,23,28,33,38,43,48,53,58 * * * *",
 ] as const;
 export const HTTP_SHARD_COUNT = CRON_SHARDS.length;
+export const HTTP_UNITS = COMPANIES_PER_BATCH;
+export const UNITS_PER_CRON = COMPANIES_PER_BATCH / CRON_SHARDS.length;
 export const CRON_INTERVAL_MS = 5 * 60 * 1000;
 
 export type ControlState = {

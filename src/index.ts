@@ -3,13 +3,14 @@ import { checkAll, checkOne } from "./check";
 import { COMPANIES } from "./companies";
 import {
   CRON_SHARDS,
-  HTTP_SHARD_COUNT,
+  HTTP_UNITS,
+  UNITS_PER_CRON,
   setCompanyPaused,
   setGlobalPaused,
 } from "./control";
 import { notifyNewJobs } from "./discord";
 import { extractJobs } from "./parse";
-import { getTrackerStatus, renderStatusHtml } from "./status";
+import { getTrackerStatus, recordPollTick, renderStatusHtml } from "./status";
 
 export default {
   async scheduled(
@@ -17,30 +18,78 @@ export default {
     env: Env,
     _ctx: ExecutionContext,
   ): Promise<void> {
-    // Each cron expression owns one shard. A hung fetch cannot block the
-    // other shards or the next 5-minute window.
+    // Each cron owns 5 companies of the 20-company window, but dispatches
+    // them as one-company HTTP invocations so Free's 10ms CPU cap is survivable.
     const found = CRON_SHARDS.findIndex((expr) => expr === controller.cron);
-    const shard = found >= 0 ? found : 0;
-    const response = await env.SELF.fetch(
-      new Request(
-        `https://redeye.internal/run?shard=${shard}&shards=${HTTP_SHARD_COUNT}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${env.RUN_SECRET}`,
-            "X-Redeye-Cron": "1",
+    const cronShard = found >= 0 ? found : 0;
+    const polledIds: string[] = [];
+    let ok = 0;
+    for (let i = 0; i < UNITS_PER_CRON; i++) {
+      const unit = cronShard * UNITS_PER_CRON + i;
+      const response = await env.SELF.fetch(
+        new Request(
+          `https://redeye.internal/run?shard=${unit}&shards=${HTTP_UNITS}&ledger=0`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${env.RUN_SECRET}`,
+              "X-Redeye-Cron": "1",
+            },
           },
-        },
-      ),
-    );
-    const body = await response.text();
+        ),
+      );
+      const body = await response.text();
+      if (!response.ok) {
+        console.log(
+          JSON.stringify({
+            event: "cron_dispatch_failed",
+            cron: controller.cron,
+            cronShard,
+            unit,
+            status: response.status,
+            detail: body.slice(0, 300),
+          }),
+        );
+        continue;
+      }
+      ok += 1;
+      try {
+        const summary = JSON.parse(body) as {
+          details?: Array<{ companyId?: string; status?: string }>;
+        };
+        for (const detail of summary.details ?? []) {
+          if (detail.companyId && detail.status !== "skipped") {
+            polledIds.push(detail.companyId);
+          }
+        }
+      } catch {
+        console.log(
+          JSON.stringify({
+            event: "cron_dispatch_parse_failed",
+            unit,
+          }),
+        );
+      }
+    }
+    try {
+      await recordPollTick(env.SEEN_JOBS, polledIds, cronShard);
+    } catch (error) {
+      console.log(
+        JSON.stringify({
+          event: "poll_ledger_write_failed",
+          cronShard,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
     console.log(
       JSON.stringify({
-        event: response.ok ? "cron_dispatch_ok" : "cron_dispatch_failed",
+        event: "cron_dispatch_ok",
         cron: controller.cron,
-        shard,
-        status: response.status,
-        detail: response.ok ? undefined : body.slice(0, 300),
+        cronShard,
+        ok,
+        units: UNITS_PER_CRON,
+        polled: polledIds.length,
       }),
     );
   },

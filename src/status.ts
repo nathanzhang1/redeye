@@ -488,7 +488,7 @@ export function renderStatusHtml(
         ? `<br />Last new jobs: ${escapeHtml(formatPacificTime(status.lastRun.checkedAt))} · new ${status.lastRun.newJobs} · failures ${status.lastRun.failures}`
         : ""
     }
-    <br />Four staggered crons each poll ${Math.ceil(COMPANIES_PER_BATCH / HTTP_SHARD_COUNT)} companies via HTTP (no shared parent). Full loop ≈ ${Math.ceil(status.companies.length / COMPANIES_PER_BATCH) * 5} minutes.
+    <br />Four staggered crons each fetch ${COMPANIES_PER_BATCH / 4} companies as one-company HTTP calls (Free 10ms CPU). Full loop ≈ ${Math.ceil(status.companies.length / COMPANIES_PER_BATCH) * 5} minutes.
   </div>
   ${
     status.tickStale
